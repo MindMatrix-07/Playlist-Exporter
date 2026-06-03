@@ -509,8 +509,8 @@ async function exportToPDF() {
     doc.text('Note: AI language detection is search-based and may occasionally make mistakes.', pageW/2, pageH-23, {align:'center'});
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,100);
     doc.text('Generated with Playlist Info Exporter', pageW/2, pageH-16, {align:'center'});
-    doc.setFontSize(7.5); doc.setTextColor(80,80,110);
-    const ghLabel = '\uD83D\uDC19 github.com/MindMatrix-07/Playlist-Exporter';
+    doc.setFontSize(7.5); doc.setTextColor(100,100,140);
+    const ghLabel = '[ GitHub ]  github.com/MindMatrix-07/Playlist-Exporter';
     const ghLabelWidth = doc.getTextWidth(ghLabel);
     doc.textWithLink(ghLabel, pageW/2 - ghLabelWidth/2, pageH-9, { url: 'https://github.com/MindMatrix-07/Playlist-Exporter' });
 
@@ -652,8 +652,8 @@ async function exportToPDF() {
     }
     doc.text(footerNote, mL, y);
     y += 5;
-    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(80,80,110);
-    doc.textWithLink('\uD83D\uDC19 github.com/MindMatrix-07/Playlist-Exporter', mL, y, { url: 'https://github.com/MindMatrix-07/Playlist-Exporter' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(100,100,140);
+    doc.textWithLink('[ GitHub ]  github.com/MindMatrix-07/Playlist-Exporter', mL, y, { url: 'https://github.com/MindMatrix-07/Playlist-Exporter' });
 
     const safe = (playlistData?.name||'playlist').replace(/[^a-z0-9]/gi,'_').toLowerCase();
     
