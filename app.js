@@ -5,6 +5,51 @@
 let allTracks = [];
 let playlistData = null;
 
+// Heuristic Language Detector
+function detectLanguage(title, isrc) {
+  if (!title) return 'English';
+  
+  // 1. Unicode script detections
+  if (/[\uac00-\ud7af]/.test(title)) return 'Korean';
+  if (/[\u3040-\u30ff\u31f0-\u31ff]/.test(title)) return 'Japanese';
+  if (/[\u4e00-\u9faf]/.test(title)) return 'Chinese';
+  if (/[\u0900-\u097f]/.test(title)) return 'Hindi / Indian';
+  if (/[\u0600-\u06ff]/.test(title)) return 'Arabic';
+  if (/[\u0400-\u04ff]/.test(title)) return 'Cyrillic';
+
+  // 2. ISRC prefix lookup mapping
+  if (isrc && isrc !== '—') {
+    const code = isrc.slice(0, 2).toUpperCase();
+    const mapping = {
+      'IN': 'Hindi / Punjabi',
+      'US': 'English', 'GB': 'English', 'CA': 'English', 'AU': 'English', 'NZ': 'English',
+      'QZ': 'English', 'QM': 'English', 'DG': 'English', 'ZZ': 'English',
+      'KR': 'Korean',
+      'JP': 'Japanese',
+      'ES': 'Spanish', 'MX': 'Spanish', 'CO': 'Spanish', 'AR': 'Spanish', 'CL': 'Spanish',
+      'BR': 'Portuguese', 'PT': 'Portuguese',
+      'FR': 'French',
+      'DE': 'German',
+      'IT': 'Italian',
+      'NL': 'Dutch',
+      'SE': 'Swedish', 'NO': 'Norwegian', 'DK': 'Danish', 'FI': 'Finnish',
+      'RU': 'Russian', 'UA': 'Ukrainian',
+      'TR': 'Turkish',
+      'CN': 'Chinese', 'TW': 'Chinese', 'HK': 'Chinese',
+      'ZA': 'English'
+    };
+    if (mapping[code]) return mapping[code];
+  }
+
+  // 3. Latinized Hindi/Punjabi keywords matching common lyric vocab
+  const commonHindiWords = /\b(tere|bina|guzara|jiya|laage|na|duhaai|dil|pyar|tum|meri|jaan|kuch|hota|hai|sath|rabba|ishq|sanam|ki|se|ko|ek|do|teen|lagi|padi|saahel|raahi|o|re|mann|tanha|dua)\b/i;
+  if (commonHindiWords.test(title)) {
+    return 'Hindi / Punjabi';
+  }
+
+  return 'English';
+}
+
 const SCOPES = 'playlist-read-private playlist-read-collaborative';
 const REDIRECT_URI = window.location.origin;
 
@@ -207,12 +252,14 @@ async function fetchAllTracks(token, playlistId, totalExpected, onProgress) {
     const items = (data.items || []).filter(i => i && (i.track || i.item) && (i.track || i.item).id);
     tracks = tracks.concat(items.map(i => {
       const t = i.track || i.item;
+      const isrc = t.external_ids?.isrc || '—';
       return {
         name:    t.name    || 'Unknown',
         artists: (t.artists || []).map(a => a.name).join(', '),
         album:   t.album?.name || '',
         url:     t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
-        isrc:    t.external_ids?.isrc || '—',
+        isrc:    isrc,
+        language: detectLanguage(t.name || '', isrc)
       };
     }));
 
@@ -308,6 +355,7 @@ function renderResults() {
       </div>
       <span class="col-artists" title="${escHtml(track.artists)}">${escHtml(track.artists)}</span>
       <span class="col-isrc"><span class="isrc-badge">${escHtml(track.isrc)}</span></span>
+      <span class="col-lang"><span class="lang-badge">${escHtml(track.language)}</span></span>
       <span class="col-link">
         <a href="${track.url}" target="_blank">
           <svg viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -330,7 +378,7 @@ function escHtml(str) {
 function copyToClipboard() {
   if (!allTracks.length) return;
   const lines = allTracks.map((t, i) =>
-    `${i+1}. ${t.name}\n   Artists: ${t.artists}\n   ISRC: ${t.isrc}\n   Link: ${t.url}`);
+    `${i+1}. ${t.name}\n   Artists: ${t.artists}\n   ISRC: ${t.isrc}\n   Language: ${t.language}\n   Link: ${t.url}`);
   const text = `${playlistData?.name || 'Playlist'} — ${allTracks.length} Tracks\n\n` + lines.join('\n\n');
   navigator.clipboard.writeText(text)
     .then(() => showToast('✓ Copied to clipboard!'))
@@ -448,28 +496,32 @@ async function exportToPDF() {
     doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(20,20,40);
     doc.text('Track List', mL, y); y += 8;
 
-    const cN=mL, cS=mL+10, cA=mL+76, cI=mL+130, cLn=mL+162;
+    const cN=mL, cS=mL+10, cA=mL+62, cI=mL+106, cLa=mL+134, cLn=mL+160;
     doc.setFillColor(29,185,84); doc.rect(mL,y,cW,8,'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
     doc.text('#',cN,y+5.5); doc.text('Song',cS,y+5.5);
-    doc.text('Artists',cA,y+5.5); doc.text('ISRC',cI,y+5.5); doc.text('Spotify',cLn,y+5.5);
+    doc.text('Artists',cA,y+5.5); doc.text('ISRC',cI,y+5.5); doc.text('Language',cLa,y+5.5); doc.text('Spotify',cLn,y+5.5);
     y += 10;
 
     allTracks.forEach((track, i) => {
       // Split text to fit columns for multi-line wrapping
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-      const songLines = doc.splitTextToSize(track.name, 62);
+      const songLines = doc.splitTextToSize(track.name, 50);
       
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
-      const albumLines = doc.splitTextToSize(track.album, 62);
+      const albumLines = doc.splitTextToSize(track.album, 50);
       
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-      const artistLines = doc.splitTextToSize(track.artists, 50);
+      const artistLines = doc.splitTextToSize(track.artists, 42);
+
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+      const langLines = doc.splitTextToSize(track.language || 'English', 24);
 
       // Calculate row height dynamically
       const songH = songLines.length * 3.2 + albumLines.length * 2.6 + 3.5;
       const artistH = artistLines.length * 3.0 + 3.5;
-      const rH = Math.max(12, songH, artistH);
+      const langH = langLines.length * 2.8 + 3.5;
+      const rH = Math.max(12, songH, artistH, langH);
 
       checkPage(rH + 2);
 
@@ -505,6 +557,14 @@ async function exportToPDF() {
       artistLines.forEach(line => {
         doc.text(line, cA, artistY);
         artistY += 3.0;
+      });
+
+      // Draw Language Lines
+      let langY = y + 5.0;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 100);
+      langLines.forEach(line => {
+        doc.text(line, cLa, langY);
+        langY += 2.8;
       });
 
       // Draw ISRC (centered vertically in row)

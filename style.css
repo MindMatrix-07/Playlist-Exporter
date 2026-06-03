@@ -547,7 +547,7 @@ body {
 
 .table-header {
   display: grid;
-  grid-template-columns: 48px 1fr 180px 120px 90px;
+  grid-template-columns: 48px 1fr 160px 110px 120px 80px;
   gap: 12px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--border);
@@ -572,7 +572,7 @@ body {
 
 .track-row {
   display: grid;
-  grid-template-columns: 48px 1fr 180px 120px 90px;
+  grid-template-columns: 48px 1fr 160px 110px 120px 80px;
   gap: 12px;
   padding: 14px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.04);
@@ -654,6 +654,27 @@ body {
   display: block;
 }
 
+.col-lang {
+  display: flex;
+  align-items: center;
+}
+
+.lang-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(167, 139, 250, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 5px;
+  padding: 2px 7px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+  display: block;
+}
+
 .col-link a {
   display: inline-flex;
   align-items: center;
@@ -711,7 +732,7 @@ body {
   .table-header, .track-row {
     grid-template-columns: 36px 1fr 90px;
   }
-  .col-artists, .col-isrc { display: none; }
+  .col-artists, .col-isrc, .col-lang { display: none; }
   .setup-card { padding: 24px 20px; }
   .setup-title h1 { font-size: 1.4rem; }
 }
