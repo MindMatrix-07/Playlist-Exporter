@@ -4,7 +4,7 @@
 
 let allTracks = [];
 let playlistData = null;
-let aiScrapingInProgress = false;
+let aiDetectionInProgress = false;
 
 // Heuristic Language Detector
 function detectLanguage(title, isrc) {
@@ -314,9 +314,9 @@ async function fetchPlaylist() {
 
     const aiModeCheckbox = document.getElementById('aiModeCheckbox');
     if (aiModeCheckbox && aiModeCheckbox.checked) {
-      aiScrapingInProgress = false;
+      aiDetectionInProgress = false;
       setTimeout(() => {
-        startGoogleAiLanguageScraping();
+        startGoogleAiLanguageDetection();
       }, 100);
     }
 
@@ -640,24 +640,24 @@ function initAiToggleListener() {
     cb.addEventListener('change', () => {
       if (cb.checked) {
         if (allTracks && allTracks.length > 0) {
-          startGoogleAiLanguageScraping();
+          startGoogleAiLanguageDetection();
         }
       } else {
-        aiScrapingInProgress = false;
+        aiDetectionInProgress = false;
       }
     });
   }
 }
 
-async function startGoogleAiLanguageScraping() {
-  if (aiScrapingInProgress) return;
-  aiScrapingInProgress = true;
+async function startGoogleAiLanguageDetection() {
+  if (aiDetectionInProgress) return;
+  aiDetectionInProgress = true;
 
   const tracksToScan = allTracks.map((t, idx) => ({ track: t, idx }));
   const body = document.getElementById('tracksBody');
 
   for (const item of tracksToScan) {
-    if (!aiScrapingInProgress) break;
+    if (!aiDetectionInProgress) break;
 
     const track = item.track;
     const idx = item.idx;
@@ -704,13 +704,13 @@ async function startGoogleAiLanguageScraping() {
 
       if (err.message && err.message.includes('CAPTCHA')) {
         showToast('⚠️ Google CAPTCHA appeared. Please solve it.');
-        aiScrapingInProgress = false;
+        aiDetectionInProgress = false;
         break;
       }
     }
   }
 
-  aiScrapingInProgress = false;
+  aiDetectionInProgress = false;
 }
 
 // ─── Init ─────────────────────────────────────

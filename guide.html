@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chrome Extension Setup Guide — Playlist Exporter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2.9">
+  <style>
+    .guide-container {
+      max-width: 720px;
+      margin: 80px auto;
+      padding: 0 20px;
+    }
+    .guide-card {
+      padding: 40px;
+      position: relative;
+    }
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      margin-bottom: 32px;
+      transition: color 0.2s;
+    }
+    .btn-back:hover {
+      color: var(--accent);
+    }
+    .step-list {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .step-item {
+      display: flex;
+      gap: 20px;
+      padding: 24px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.2s;
+    }
+    .step-item:hover {
+      border-color: rgba(124, 58, 237, 0.3);
+    }
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(124, 58, 237, 0.4);
+    }
+    .step-content h3 {
+      font-size: 1.1rem;
+      color: var(--text-primary);
+      margin: 0 0 8px 0;
+      font-weight: 600;
+    }
+    .step-content p {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 0;
+    }
+    .step-content code {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+    }
+    .btn-download-action {
+      display: inline-block;
+      margin-top: 8px;
+      background: var(--accent);
+      color: #fff !important;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      text-decoration: none !important;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-download-action:hover {
+      background: #6d28d9;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow bg-glow-left"></div>
+  <div class="bg-glow bg-glow-right"></div>
+
+  <div class="guide-container">
+    <a href="index.html" class="btn-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      Back to Playlist Exporter
+    </a>
+
+    <div class="guide-card glass-card">
+      <div class="setup-title" style="margin-bottom: 32px;">
+        <h1 style="font-size: 2rem;">Chrome Extension Installation Guide</h1>
+        <p>Follow these quick steps to install the Playlist Exporter Chrome Extension and unlock Google AI Mode.</p>
+      </div>
+
+      <div class="step-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Download the Extension</h3>
+            <p>Download the packed extension zip file using the link below:</p>
+            <a href="spotify-playlist-exporter.zip" download="spotify-playlist-exporter.zip" class="btn-download-action">Download Extension ZIP</a>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Extract the ZIP file</h3>
+            <p>Locate the downloaded <code>spotify-playlist-exporter.zip</code> file on your computer and extract it to a permanent folder (e.g. inside Documents or a custom location).</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Open Chrome Extensions</h3>
+            <p>Open Google Chrome, type <code>chrome://extensions</code> in the address bar, and hit Enter. (Alternatively, click the Chrome Menu (three dots) -> <strong>Extensions</strong> -> <strong>Manage Extensions</strong>).</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>Enable Developer Mode</h3>
+            <p>In the top-right corner of the Extensions page, turn on the <strong>Developer mode</strong> switch.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h3>Load the Unpacked Folder</h3>
+            <p>Click the <strong>Load unpacked</strong> button in the top-left corner of the Extensions page. In the file explorer, select the folder where you extracted the extension files (the folder containing <code>manifest.json</code>).</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">6</div>
+          <div class="step-content">
+            <h3>Verify and Refresh</h3>
+            <p>Once loaded, go back to the <a href="index.html" style="color: var(--accent); font-weight: 500; text-decoration: underline;">Playlist Exporter</a> page, do a hard refresh (<code>Ctrl + Shift + R</code>), and connect Spotify. The "Google AI Mode" option will now be active!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
