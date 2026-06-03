@@ -156,17 +156,17 @@ async function fetchPlaylist() {
 
     setLoading(true, 'Fetching playlist info…');
     playlistData = await fetchPlaylistMeta(token, playlistId);
-    
-    if (!playlistData || !playlistData.tracks) {
-      console.error('Playlist response:', playlistData);
-      throw new Error(`Playlist data could not be retrieved. Response keys: ${playlistData ? Object.keys(playlistData).join(', ') : 'null'}. Response string: ${JSON.stringify(playlistData)}`);
-    }
-    
-    const total = playlistData.tracks.total;
 
-    setLoading(true, `Fetching tracks (0 / ${total})…`);
+    if (!playlistData || playlistData.error) {
+      throw new Error(`Could not load playlist (${playlistData?.error?.status || 'unknown error'}): ${playlistData?.error?.message || 'Check credentials and playlist URL.'}`);
+    }
+
+    // tracks.total may be null in some Spotify responses; fetchAllTracks paginates independently
+    const total = playlistData?.tracks?.total ?? null;
+
+    setLoading(true, `Fetching tracks${total ? ` (0 / ${total})` : '…'}…`);
     allTracks = await fetchAllTracks(token, playlistId, total, (done, all) => {
-      setLoading(true, `Fetching tracks (${done} / ${all})…`);
+      setLoading(true, `Fetching tracks (${done}${all ? ' / ' + all : ''})…`);
     });
 
     setLoading(false);
