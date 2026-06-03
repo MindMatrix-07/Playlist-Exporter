@@ -562,10 +562,7 @@ async function exportToPDF() {
       // Split text to fit columns for multi-line wrapping
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
       const songLines = doc.splitTextToSize(track.name, songWrapWidth);
-      
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
-      const albumLines = doc.splitTextToSize(track.album, albumWrapWidth);
-      
+
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
       const artistLines = doc.splitTextToSize(track.artists, artistWrapWidth);
 
@@ -576,7 +573,7 @@ async function exportToPDF() {
       }
 
       // Calculate row height dynamically
-      const songH = songLines.length * 3.2 + albumLines.length * 2.6 + 3.5;
+      const songH = songLines.length * 3.2 + 3.5;
       const artistH = artistLines.length * 3.0 + 3.5;
       const langH = isAiOn ? (langLines.length * 2.8 + 3.5) : 0;
       const rH = Math.max(12, songH, artistH, langH);
@@ -594,19 +591,11 @@ async function exportToPDF() {
       doc.text(String(i + 1), cN, y + 5.5);
 
       // Draw Song Lines
-      let songY = y + 4.5;
+      let songY = y + 5.0;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(20, 20, 40);
       songLines.forEach(line => {
         doc.text(line, cS, songY);
         songY += 3.2;
-      });
-
-      // Draw Album Lines
-      let albumY = songY - 0.4;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(160, 160, 180);
-      albumLines.forEach(line => {
-        doc.text(line, cS, albumY);
-        albumY += 2.6;
       });
 
       // Draw Artist Lines
