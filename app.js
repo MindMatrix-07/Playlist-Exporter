@@ -194,7 +194,7 @@ async function fetchAllTracks(token, playlistId, totalExpected, onProgress) {
 
   while (true) {
     const resp = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}`,
+      `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=${limit}&offset=${offset}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!resp.ok) {
