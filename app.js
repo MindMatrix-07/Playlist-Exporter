@@ -260,7 +260,7 @@ async function fetchAllTracks(token, playlistId, totalExpected, onProgress) {
         album:   t.album?.name || '',
         url:     t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
         isrc:    isrc,
-        language: detectLanguage(t.name || '', isrc)
+        language: ''
       };
     }));
 
@@ -373,6 +373,14 @@ function renderResults() {
       </span>`;
     body.appendChild(row);
   });
+
+  const aiModeCheckbox = document.getElementById('aiModeCheckbox');
+  const isAiOn = aiModeCheckbox && aiModeCheckbox.checked;
+  const table = document.querySelector('.tracks-table');
+  if (table) {
+    if (isAiOn) table.classList.remove('no-ai-mode');
+    else table.classList.add('no-ai-mode');
+  }
 
   document.getElementById('resultsSection').style.display = 'block';
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -505,31 +513,67 @@ async function exportToPDF() {
     doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(20,20,40);
     doc.text('Track List', mL, y); y += 8;
 
-    const cN=mL, cS=mL+10, cA=mL+62, cI=mL+106, cLa=mL+134, cLn=mL+160;
+    const aiModeCheckbox = document.getElementById('aiModeCheckbox');
+    const isAiOn = aiModeCheckbox && aiModeCheckbox.checked;
+
+    let cN, cS, cA, cI, cLa, cLn;
+    let songWrapWidth, albumWrapWidth, artistWrapWidth, langWrapWidth;
+
+    if (isAiOn) {
+      cN = mL;
+      cS = mL + 10;
+      cA = mL + 62;
+      cI = mL + 106;
+      cLa = mL + 134;
+      cLn = mL + 160;
+      songWrapWidth = 50;
+      albumWrapWidth = 50;
+      artistWrapWidth = 42;
+      langWrapWidth = 24;
+    } else {
+      cN = mL;
+      cS = mL + 10;
+      cA = mL + 72;
+      cI = mL + 124;
+      cLa = null;
+      cLn = mL + 156;
+      songWrapWidth = 60;
+      albumWrapWidth = 60;
+      artistWrapWidth = 50;
+      langWrapWidth = 0;
+    }
+
     doc.setFillColor(29,185,84); doc.rect(mL,y,cW,8,'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
     doc.text('#',cN,y+5.5); doc.text('Song',cS,y+5.5);
-    doc.text('Artists',cA,y+5.5); doc.text('ISRC',cI,y+5.5); doc.text('Language',cLa,y+5.5); doc.text('Spotify',cLn,y+5.5);
+    doc.text('Artists',cA,y+5.5); doc.text('ISRC',cI,y+5.5);
+    if (isAiOn) {
+      doc.text('Language',cLa,y+5.5);
+    }
+    doc.text('Spotify',cLn,y+5.5);
     y += 10;
 
     allTracks.forEach((track, i) => {
       // Split text to fit columns for multi-line wrapping
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-      const songLines = doc.splitTextToSize(track.name, 50);
+      const songLines = doc.splitTextToSize(track.name, songWrapWidth);
       
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
-      const albumLines = doc.splitTextToSize(track.album, 50);
+      const albumLines = doc.splitTextToSize(track.album, albumWrapWidth);
       
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-      const artistLines = doc.splitTextToSize(track.artists, 42);
+      const artistLines = doc.splitTextToSize(track.artists, artistWrapWidth);
 
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
-      const langLines = doc.splitTextToSize(track.language || 'English', 24);
+      let langLines = [];
+      if (isAiOn) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+        langLines = doc.splitTextToSize(track.language || 'English', langWrapWidth);
+      }
 
       // Calculate row height dynamically
       const songH = songLines.length * 3.2 + albumLines.length * 2.6 + 3.5;
       const artistH = artistLines.length * 3.0 + 3.5;
-      const langH = langLines.length * 2.8 + 3.5;
+      const langH = isAiOn ? (langLines.length * 2.8 + 3.5) : 0;
       const rH = Math.max(12, songH, artistH, langH);
 
       checkPage(rH + 2);
@@ -568,13 +612,15 @@ async function exportToPDF() {
         artistY += 3.0;
       });
 
-      // Draw Language Lines
-      let langY = y + 5.0;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 100);
-      langLines.forEach(line => {
-        doc.text(line, cLa, langY);
-        langY += 2.8;
-      });
+      if (isAiOn) {
+        // Draw Language Lines
+        let langY = y + 5.0;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 100);
+        langLines.forEach(line => {
+          doc.text(line, cLa, langY);
+          langY += 2.8;
+        });
+      }
 
       // Draw ISRC (centered vertically in row)
       doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(0, 150, 136);
@@ -642,12 +688,27 @@ function initAiToggleListener() {
   const cb = document.getElementById('aiModeCheckbox');
   if (cb) {
     cb.addEventListener('change', () => {
+      const pdfBtn = document.getElementById('pdfBtn');
+      const copyBtn = document.getElementById('copyBtn');
+
       if (cb.checked) {
+        // Clear languages and re-render
+        allTracks.forEach(t => t.language = '');
+        renderResults();
         if (allTracks && allTracks.length > 0) {
           startGoogleAiLanguageDetection();
         }
       } else {
         aiDetectionInProgress = false;
+        allTracks.forEach(t => t.language = '');
+        renderResults();
+        if (pdfBtn) {
+          pdfBtn.disabled = false;
+          pdfBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z" fill="currentColor"/></svg> Export PDF`;
+        }
+        if (copyBtn) {
+          copyBtn.disabled = false;
+        }
       }
     });
   }
@@ -692,6 +753,11 @@ async function startGoogleAiLanguageDetection() {
   if (aiDetectionInProgress) return;
   aiDetectionInProgress = true;
 
+  const pdfBtn = document.getElementById('pdfBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  if (pdfBtn) pdfBtn.disabled = true;
+  if (copyBtn) copyBtn.disabled = true;
+
   const tracksToScan = allTracks.map((t, idx) => ({ track: t, idx }));
   const body = document.getElementById('tracksBody');
 
@@ -702,6 +768,10 @@ async function startGoogleAiLanguageDetection() {
     const idx = item.idx;
     const row = body ? body.children[idx] : null;
     const badge = row ? row.querySelector('.col-lang .lang-badge') : null;
+
+    if (pdfBtn) {
+      pdfBtn.innerHTML = `AI Detecting (${idx + 1} / ${tracksToScan.length})…`;
+    }
 
     if (badge) {
       badge.classList.add('scanning-text');
@@ -736,6 +806,18 @@ async function startGoogleAiLanguageDetection() {
   }
 
   aiDetectionInProgress = false;
+  
+  // Re-enable buttons if AI check is still enabled or if scanning finished
+  const cb = document.getElementById('aiModeCheckbox');
+  if (cb && cb.checked) {
+    if (pdfBtn) {
+      pdfBtn.disabled = false;
+      pdfBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z" fill="currentColor"/></svg> Export PDF`;
+    }
+    if (copyBtn) {
+      copyBtn.disabled = false;
+    }
+  }
 }
 
 // Listen to webpage postMessage channel from content script

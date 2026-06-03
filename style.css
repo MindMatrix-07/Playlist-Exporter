@@ -588,6 +588,14 @@ body {
 
 .track-row:last-child { border-bottom: none; }
 
+/* If AI Mode is disabled, hide Language column and adjust grid */
+.no-ai-mode .col-lang {
+  display: none !important;
+}
+.no-ai-mode .table-header, .no-ai-mode .track-row {
+  grid-template-columns: 48px 1fr 180px 130px 80px;
+}
+
 .track-row:hover {
   background: var(--surface-hover);
 }
