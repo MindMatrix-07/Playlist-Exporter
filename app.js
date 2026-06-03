@@ -179,7 +179,11 @@ async function fetchPlaylistMeta(token, playlistId) {
     `https://api.spotify.com/v1/playlists/${playlistId}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  if (!resp.ok) throw new Error(`Playlist not found or private (${resp.status})`);
+  if (!resp.ok) {
+    const errBody = await resp.json().catch(() => ({}));
+    const errMsg = errBody?.error?.message || `HTTP ${resp.status}`;
+    throw new Error(`Failed to load playlist metadata: ${errMsg} (${resp.status})`);
+  }
   return resp.json();
 }
 
@@ -193,7 +197,11 @@ async function fetchAllTracks(token, playlistId, totalExpected, onProgress) {
       `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    if (!resp.ok) throw new Error(`Failed to fetch tracks (${resp.status})`);
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      const errMsg = errBody?.error?.message || `HTTP ${resp.status}`;
+      throw new Error(`Failed to fetch tracks: ${errMsg} (${resp.status})`);
+    }
     const data = await resp.json();
 
     const items = (data.items || []).filter(i => i && i.track && i.track.id);
