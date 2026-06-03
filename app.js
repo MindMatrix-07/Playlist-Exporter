@@ -337,6 +337,46 @@ function copyToClipboard() {
     .catch(() => showToast('Could not copy.'));
 }
 
+// Helper to convert Spotify logo SVG to PNG Data URL
+async function svgToPngDataUrl(svgString, width = 120, height = 120) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => {
+      resolve(null);
+    };
+  });
+}
+
+// Helper to fetch external image URL and convert to JPEG Data URL
+async function getImageUrlAsJpeg(url, width = 300, height = 300) {
+  if (!url) return null;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => {
+      resolve(null);
+    };
+  });
+}
+
 // ─── Export PDF ───────────────────────────────
 
 async function exportToPDF() {
@@ -369,14 +409,34 @@ async function exportToPDF() {
     doc.setFillColor(10,10,20); doc.rect(0,0,pageW,pageH,'F');
     doc.setFillColor(29,185,84); doc.rect(0,0,pageW,55,'F');
     doc.setFillColor(0,0,0); doc.circle(pageW/2,28,18,'F');
-    doc.setFontSize(18); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-    doc.text('♪', pageW/2, 32, {align:'center'});
-    doc.setFontSize(22);
-    doc.text(doc.splitTextToSize(playlistData?.name || 'Playlist', cW), pageW/2, 70, {align:'center'});
+    
+    // Draw Spotify Logo inside circle
+    const spotifySvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1DB954"/><path d="M17.9 10.9C14.7 9 9.35 8.8 6.3 9.75c-.5.15-1-.15-1.15-.6-.15-.5.15-1 .6-1.15 3.55-1.05 9.4-.85 13.1 1.35.45.25.6.85.35 1.3-.25.35-.85.5-1.3.25zm-.1 2.8c-.25.35-.7.5-1.05.25-2.7-1.65-6.8-2.15-9.95-1.15-.4.1-.8-.1-.9-.5-.1-.4.1-.8.5-.9 3.65-1.1 8.15-.55 11.25 1.35.3.15.45.65.15 1zm-1.2 2.75c-.2.3-.55.4-.85.2-2.35-1.45-5.3-1.75-8.8-.95-.35.1-.65-.15-.75-.45-.1-.35.15-.65.45-.75 3.8-.85 7.1-.5 9.7 1.1.35.15.4.55.25.85z" fill="white"/></svg>`;
+    const logoPng = await svgToPngDataUrl(spotifySvg, 120, 120);
+    if (logoPng) {
+      doc.addImage(logoPng, 'PNG', pageW/2 - 12, 16, 24, 24);
+    }
+
+    doc.setFontSize(22); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
+    doc.text(doc.splitTextToSize(playlistData?.name || 'Playlist', cW), pageW/2, 72, {align:'center'});
     doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(160,220,160);
-    doc.text(`by ${playlistData?.owner?.display_name || 'Unknown'}`, pageW/2, 82, {align:'center'});
+    doc.text(`by ${playlistData?.owner?.display_name || 'Unknown'}`, pageW/2, 84, {align:'center'});
     doc.setFontSize(10); doc.setTextColor(130,130,180);
-    doc.text(`${allTracks.length} tracks`, pageW/2, 90, {align:'center'});
+    doc.text(`${allTracks.length} tracks`, pageW/2, 92, {align:'center'});
+
+    // Draw Playlist Cover Image in the blank space
+    const coverUrl = playlistData.images?.[0]?.url;
+    if (coverUrl) {
+      const coverJpg = await getImageUrlAsJpeg(coverUrl, 320, 320);
+      if (coverJpg) {
+        doc.addImage(coverJpg, 'JPEG', pageW/2 - 32, 106, 64, 64);
+        // Draw subtle border around artwork
+        doc.setDrawColor(40, 40, 60);
+        doc.setLineWidth(0.5);
+        doc.rect(pageW/2 - 32, 106, 64, 64);
+      }
+    }
+
     doc.setFontSize(8.5); doc.setTextColor(29,185,84);
     doc.text(playlistData?.external_urls?.spotify || '', pageW/2, pageH-22, {align:'center'});
     doc.setTextColor(80,80,100);
