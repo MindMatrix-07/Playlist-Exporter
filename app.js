@@ -111,6 +111,18 @@ async function fetchAllTracks(token, playlistId, totalExpected, onProgress) {
   return tracks;
 }
 
+// Load credentials on startup
+document.addEventListener('DOMContentLoaded', () => {
+  const savedId = localStorage.getItem('spotify_client_id');
+  const savedSecret = localStorage.getItem('spotify_client_secret');
+  if (savedId) {
+    document.getElementById('clientId').value = savedId;
+  }
+  if (savedSecret) {
+    document.getElementById('clientSecret').value = savedSecret;
+  }
+});
+
 // ─── Main Fetch Handler ───────────────────────────────
 
 async function fetchPlaylist() {
@@ -138,8 +150,18 @@ async function fetchPlaylist() {
   try {
     const token = await getAccessToken(clientId, clientSecret);
 
+    // Save to localStorage on successful authentication
+    localStorage.setItem('spotify_client_id', clientId);
+    localStorage.setItem('spotify_client_secret', clientSecret);
+
     setLoading(true, 'Fetching playlist info…');
     playlistData = await fetchPlaylistMeta(token, playlistId);
+    
+    if (!playlistData || !playlistData.tracks) {
+      console.error('Playlist response:', playlistData);
+      throw new Error('Playlist data could not be retrieved. Make sure the playlist is public (not private or collaborative) and the URL is correct.');
+    }
+    
     const total = playlistData.tracks.total;
 
     setLoading(true, `Fetching tracks (0 / ${total})…`);
