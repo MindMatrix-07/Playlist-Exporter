@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spotify Developer Setup Guide — Playlist Exporter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2.9">
+  <style>
+    .guide-container {
+      max-width: 720px;
+      margin: 80px auto;
+      padding: 0 20px;
+    }
+    .guide-card {
+      padding: 40px;
+      position: relative;
+    }
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      margin-bottom: 32px;
+      transition: color 0.2s;
+    }
+    .btn-back:hover {
+      color: var(--accent);
+    }
+    .step-list {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .step-item {
+      display: flex;
+      gap: 20px;
+      padding: 24px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.2s;
+    }
+    .step-item:hover {
+      border-color: rgba(29, 185, 84, 0.3);
+    }
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #1db954;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(29, 185, 84, 0.4);
+    }
+    .step-content h3 {
+      font-size: 1.1rem;
+      color: var(--text-primary);
+      margin: 0 0 8px 0;
+      font-weight: 600;
+    }
+    .step-content p {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 0;
+    }
+    .step-content code {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+    }
+    .btn-spotify-action {
+      display: inline-block;
+      margin-top: 8px;
+      background: #1db954;
+      color: #fff !important;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      text-decoration: none !important;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-spotify-action:hover {
+      background: #1aa34a;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow bg-glow-left"></div>
+  <div class="bg-glow bg-glow-right"></div>
+
+  <div class="guide-container">
+    <a href="index.html" class="btn-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      Back to Playlist Exporter
+    </a>
+
+    <div class="guide-card glass-card">
+      <div class="setup-title" style="margin-bottom: 32px;">
+        <h1 style="font-size: 2rem;">Spotify Developer Credentials Guide</h1>
+        <p>Follow this step-by-step tutorial to register your developer application and get your Client ID.</p>
+      </div>
+
+      <div class="step-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Open the Spotify Developer Dashboard</h3>
+            <p>Go to the developer portal dashboard and log in with your normal Spotify account details:</p>
+            <a href="https://developer.spotify.com/dashboard" target="_blank" class="btn-spotify-action">Open Spotify Dashboard</a>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Create a New Application</h3>
+            <p>Click on the green <strong>"Create App"</strong> button in the top-right corner of the dashboard.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Fill App Settings</h3>
+            <p>Enter the basic info for your application:</p>
+            <p style="margin-top: 6px; margin-bottom: 6px;">&bull; <strong>App Name:</strong> <code>Playlist Exporter</code></p>
+            <p style="margin-bottom: 12px;">&bull; <strong>Description:</strong> <code>Spotify playlist metadata and language exporter.</code></p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>Configure Redirect URI</h3>
+            <p>In the application creation form, fill the redirect details:</p>
+            <p style="margin-top: 8px;">&bull; <strong>Redirect URI:</strong> Enter the website URL exactly (e.g. <code>https://playlistinfoexporter.vercel.app/</code> or <code>http://localhost:8080/</code> if testing locally).</p>
+            <p>&bull; <strong>Which API are you planning to use:</strong> Select the checkmark for <strong>Web API</strong>.</p>
+            <p>&bull; Read and accept the developer terms, then click <strong>Save</strong>.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h3>Retrieve Client ID</h3>
+            <p>Click on your newly created app dashboard card and choose <strong>Settings</strong> in the top right. Under <strong>Basic Information</strong>, you will see your <strong>Client ID</strong>. Copy it, paste it into the login card of the Playlist Exporter app, and click connect!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
