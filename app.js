@@ -72,7 +72,7 @@ async function getAccessToken(clientId, clientSecret) {
 
 async function fetchPlaylistMeta(token, playlistId) {
   const resp = await fetch(
-    `https://api.spotify.com/v1/playlists/${playlistId}?fields=name,description,owner,images,external_urls,tracks.total`,
+    `https://api.spotify.com/v1/playlists/${playlistId}`,
     { headers: { 'Authorization': `Bearer ${token}` } }
   );
   if (!resp.ok) throw new Error(`Playlist not found or private (${resp.status})`);
