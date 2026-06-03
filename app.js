@@ -427,7 +427,18 @@ async function exportToPDF() {
     doc.text(`Total: ${allTracks.length} tracks · Exported ${new Date().toLocaleDateString()} · Includes ISRC`, mL, y);
 
     const safe = (playlistData?.name||'playlist').replace(/[^a-z0-9]/gi,'_').toLowerCase();
-    doc.save(`${safe}_tracklist.pdf`);
+    
+    // Manual blob download trigger to guarantee filename and extension (.pdf)
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safe}_tracklist.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
     showToast('✓ PDF exported!');
   } catch(err) {
     console.error(err); showToast('PDF failed: ' + err.message);
