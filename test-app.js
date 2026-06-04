@@ -568,6 +568,8 @@ function addDoneCheckbox(doc, fieldName, x, y, size) {
       checkbox.fieldName = fieldName;
       checkbox.Rect = [x, y, size, size];
       checkbox.value = 'Off';
+      checkbox.appearanceState = 'Off';
+      checkbox.defaultValue = 'Off';
       doc.addField(checkbox);
       return;
     } catch (err) {
