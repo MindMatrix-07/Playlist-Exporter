@@ -549,6 +549,37 @@ async function getImageUrlAsJpeg(url, maxW, maxH) {
   });
 }
 
+function drawOpenTrackButton(doc, x, y, url) {
+  const size = 6;
+  doc.setDrawColor(29, 185, 84);
+  doc.setFillColor(237, 252, 244);
+  doc.roundedRect(x, y, size, size, 1.2, 1.2, 'FD');
+  doc.setLineWidth(0.45);
+  doc.line(x + 1.7, y + 4.1, x + 4.1, y + 1.7);
+  doc.line(x + 2.9, y + 1.7, x + 4.1, y + 1.7);
+  doc.line(x + 4.1, y + 1.7, x + 4.1, y + 2.9);
+  doc.link(x, y, size, size, { url });
+}
+
+function addDoneCheckbox(doc, fieldName, x, y, size) {
+  if (typeof doc.AcroFormCheckBox === 'function' && typeof doc.addField === 'function') {
+    try {
+      const checkbox = new doc.AcroFormCheckBox();
+      checkbox.fieldName = fieldName;
+      checkbox.Rect = [x, y, size, size];
+      checkbox.value = 'Off';
+      doc.addField(checkbox);
+      return;
+    } catch (err) {
+      console.warn('[PDF] Falling back to visual checkbox:', err.message);
+    }
+  }
+
+  doc.setDrawColor(29, 185, 84);
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(x, y, size, size, 0.8, 0.8, 'FD');
+}
+
 // ─── PDF Exporter ─────────────────────────────
 
 async function exportToPDF() {
@@ -664,7 +695,7 @@ async function exportToPDF() {
 
     const thumbSize = 9; // mm — album art thumbnail square
 
-    let cN, cS, cA, cI, cLa, cLn;
+    let cN, cS, cA, cI, cLa, cOpen, cDone;
     let songWrapWidth, albumWrapWidth, artistWrapWidth, langWrapWidth;
 
     if (isAiOn) {
@@ -673,18 +704,20 @@ async function exportToPDF() {
       cA = mL + 70;
       cI = mL + 110;
       cLa = mL + 138;
-      cLn = mL + 162;
+      cOpen = mL + 158;
+      cDone = mL + 171;
       songWrapWidth = 46;
       albumWrapWidth = 46;
       artistWrapWidth = 38;
-      langWrapWidth = 22;
+      langWrapWidth = 20;
     } else {
       cN = mL;
       cS = mL + 18;
       cA = mL + 80;
       cI = mL + 130;
       cLa = null;
-      cLn = mL + 158;
+      cOpen = mL + 154;
+      cDone = mL + 170;
       songWrapWidth = 56;
       albumWrapWidth = 56;
       artistWrapWidth = 46;
@@ -698,7 +731,8 @@ async function exportToPDF() {
     if (isAiOn) {
       doc.text('Language',cLa,y+5.5);
     }
-    doc.text('Spotify',cLn,y+5.5);
+    doc.text('Open',cOpen,y+5.5);
+    doc.text('Done',cDone,y+5.5);
     y += 10;
 
     // Pre-fetch all album art thumbnails in parallel
@@ -780,10 +814,10 @@ async function exportToPDF() {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(0, 150, 136);
       doc.text(track.isrc !== '—' ? track.isrc : '—', cI, y + (rH / 2) + 1);
 
-      // Draw Spotify link (centered vertically in row)
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(29, 185, 84);
-      const tid = track.url.replace('https://open.spotify.com/track/', '').slice(0, 12);
-      doc.textWithLink(tid + '\u2026', cLn, y + (rH / 2) + 1, { url: track.url });
+      // Draw compact Spotify open button and interactive done checkbox.
+      const actionY = y + (rH - 6) / 2;
+      drawOpenTrackButton(doc, cOpen + 2, actionY, track.url);
+      addDoneCheckbox(doc, `done_track_${i + 1}`, cDone + 2, actionY, 6);
 
       // Draw cell separator line
       doc.setDrawColor(225, 228, 240); doc.setLineWidth(0.2);
