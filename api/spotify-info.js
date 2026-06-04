@@ -12,11 +12,17 @@ try {
 const SOUNDPLATE_API = 'https://phpstack-822472-6184058.cloudwaysapps.com/api/spotify.php';
 const SOUNDPLATE_HEADERS = {
   'accept': '*/*',
-  'accept-language': 'en-US,en;q=0.9',
-  'referer': 'https://phpstack-822472-6184058.cloudwaysapps.com/',
+  'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7,ml;q=0.6',
+  'dnt': '1',
+  'priority': 'u=1, i',
+  'referer': 'https://phpstack-822472-6184058.cloudwaysapps.com/?',
+  'sec-ch-ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
   'sec-fetch-dest': 'empty',
   'sec-fetch-mode': 'cors',
   'sec-fetch-site': 'same-origin',
+  'sec-fetch-storage-access': 'active',
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
 };
 
@@ -52,79 +58,22 @@ module.exports = async (req, res) => {
 
     // Step 1: Scrape playlist info and track list (names, uris)
     console.log('Scraping playlist via spotify-url-info...');
-    const [playlistData, rawTracks] = await Promise.all([
-      spotifyUrlInfo.getData(url),
-      spotifyUrlInfo.getTracks(url)
-    ]);
+    const playlistData = await spotifyUrlInfo.getData(url);
+    const rawTracks = getTracksFromPlaylistData(playlistData);
     const playlistImage = playlistData.coverArt?.sources?.[0]?.url || '';
 
-    // Step 2: For each track, call soundplate API in small batches to avoid rate limiting.
-    console.log(`Fetching ISRC + album art for ${rawTracks.length} tracks via soundplate (batched)...`);
+    // Step 2: For each track, call Soundplate using the same request shape as its iframe widget.
+    console.log(`Fetching ISRC + album art for ${rawTracks.length} tracks via soundplate (sequential)...`);
 
-    const BATCH_SIZE = 5;
-    const BATCH_DELAY_MS = 900;
+    const TRACK_DELAY_MS = 2200;
     const trackDetails = [];
 
-    for (let i = 0; i < rawTracks.length; i += BATCH_SIZE) {
-      const batch = rawTracks.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < rawTracks.length; i++) {
+      const details = await fetchSoundplateDetails(rawTracks[i], playlistImage);
+      trackDetails.push(details);
 
-      const batchResults = await Promise.all(
-        batch.map(async (t) => {
-          const trackId = extractSpotifyTrackId(t);
-          const trackUrl = getSpotifyTrackUrl(t, trackId);
-
-          if (!trackUrl) {
-            return {
-              ...EMPTY_DETAILS,
-              albumArt: playlistImage,
-              trackUrl: '',
-              lookupStatus: 'missing_spotify_track_url'
-            };
-          }
-
-          // Try patiently. Soundplate can silently return empty data for later rows when called too quickly.
-          for (let attempt = 0; attempt < 4; attempt++) {
-            try {
-              if (attempt > 0) await sleep(1200 * attempt);
-              const resp = await fetch(
-                `${SOUNDPLATE_API}?q=${encodeURIComponent(trackUrl)}`,
-                { headers: SOUNDPLATE_HEADERS }
-              );
-              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-              const data = await resp.json();
-              if (data.error) throw new Error(data.error);
-
-              if (data.isrc) {
-                return {
-                  isrc: data.isrc,
-                  albumArt: data.artwork_url || playlistImage,
-                  albumName: data.album || 'Unknown Album',
-                  trackUrl,
-                  lookupStatus: 'ok'
-                };
-              }
-
-              throw new Error('Soundplate returned no ISRC');
-            } catch (e) {
-              if (attempt === 3) {
-                console.warn(`Failed for track ${trackId || trackUrl} after 4 attempts:`, e.message);
-              }
-            }
-          }
-          return {
-            ...EMPTY_DETAILS,
-            albumArt: playlistImage,
-            trackUrl,
-            lookupStatus: 'soundplate_no_isrc'
-          };
-        })
-      );
-
-      trackDetails.push(...batchResults);
-
-      // Delay between batches (skip after the last batch)
-      if (i + BATCH_SIZE < rawTracks.length) {
-        await sleep(BATCH_DELAY_MS);
+      if (i + 1 < rawTracks.length) {
+        await sleep(TRACK_DELAY_MS);
       }
     }
 
@@ -212,6 +161,86 @@ function normalizeArtists(track) {
   }
 
   return ['Unknown Artist'];
+}
+
+async function fetchSoundplateDetails(track, playlistImage) {
+  const trackId = extractSpotifyTrackId(track);
+  const trackUrl = getSpotifyTrackUrl(track, trackId);
+
+  if (!trackUrl) {
+    return {
+      ...EMPTY_DETAILS,
+      albumArt: playlistImage,
+      trackUrl: '',
+      lookupStatus: 'missing_spotify_track_url'
+    };
+  }
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      if (attempt > 0) await sleep(4000 * attempt);
+
+      const resp = await fetch(
+        `${SOUNDPLATE_API}?q=${encodeURIComponent(trackUrl)}`,
+        { headers: SOUNDPLATE_HEADERS }
+      );
+      const data = await resp.json().catch(() => ({}));
+
+      if (resp.status === 429) {
+        if (attempt < 3) {
+          await sleep(70000);
+          continue;
+        }
+        throw new Error(data.error || 'Soundplate rate limit exceeded');
+      }
+
+      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+      if (data.error) throw new Error(data.error);
+
+      if (data.isrc) {
+        return {
+          isrc: data.isrc,
+          albumArt: data.artwork_url || playlistImage,
+          albumName: data.album || 'Unknown Album',
+          trackUrl,
+          lookupStatus: 'ok'
+        };
+      }
+
+      throw new Error('Soundplate returned no ISRC');
+    } catch (e) {
+      if (attempt === 3) {
+        console.warn(`Failed for track ${trackId || trackUrl} after 4 attempts:`, e.message);
+      }
+    }
+  }
+
+  return {
+    ...EMPTY_DETAILS,
+    albumArt: playlistImage,
+    trackUrl,
+    lookupStatus: 'soundplate_no_isrc'
+  };
+}
+
+function getTracksFromPlaylistData(playlistData) {
+  if (Array.isArray(playlistData.trackList)) {
+    return playlistData.trackList.map(track => ({
+      artist: track.subtitle,
+      duration: track.duration,
+      name: track.title,
+      previewUrl: track.isPlayable ? track.audioPreview?.url : '',
+      uri: track.uri
+    }));
+  }
+
+  return [{
+    artist: playlistData.subtitle,
+    duration: playlistData.duration,
+    name: playlistData.title || playlistData.name,
+    previewUrl: playlistData.isPlayable ? playlistData.audioPreview?.url : '',
+    uri: playlistData.uri
+  }];
 }
 
 function extractSpotifyTrackId(track) {
