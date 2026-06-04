@@ -56,8 +56,8 @@ module.exports = async (req, res) => {
     // Step 2: For each track, call soundplate API in batches of 5 to avoid rate limiting
     console.log(`Fetching ISRC + album art for ${rawTracks.length} tracks via soundplate (batched)...`);
 
-    const BATCH_SIZE = 10;
-    const BATCH_DELAY_MS = 150;
+    const BATCH_SIZE = 5;
+    const BATCH_DELAY_MS = 300;
     const trackDetails = [];
 
     for (let i = 0; i < rawTracks.length; i += BATCH_SIZE) {
@@ -70,10 +70,10 @@ module.exports = async (req, res) => {
 
           if (!trackUrl) return { isrc: '—', albumArt: playlistImage, trackUrl: '' };
 
-          // Try up to 2 times
-          for (let attempt = 0; attempt < 2; attempt++) {
+          // Try up to 3 times. Soundplate can drop later rows when called too quickly.
+          for (let attempt = 0; attempt < 3; attempt++) {
             try {
-              if (attempt > 0) await sleep(500); // wait before retry
+              if (attempt > 0) await sleep(800); // wait before retry
               const resp = await fetch(
                 `${SOUNDPLATE_API}?q=${encodeURIComponent(trackUrl)}`,
                 { headers: SOUNDPLATE_HEADERS }
@@ -89,8 +89,8 @@ module.exports = async (req, res) => {
                 trackUrl
               };
             } catch (e) {
-              if (attempt === 1) {
-                console.warn(`Failed for track ${trackId} after 2 attempts:`, e.message);
+              if (attempt === 2) {
+                console.warn(`Failed for track ${trackId} after 3 attempts:`, e.message);
               }
             }
           }
