@@ -649,6 +649,69 @@ body {
   text-overflow: ellipsis;
 }
 
+.track-thumb,
+.track-thumb-placeholder,
+.track-thumb-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.track-thumb {
+  object-fit: cover;
+  display: block;
+}
+
+.track-thumb-placeholder {
+  background: rgba(255,255,255,0.05);
+}
+
+.track-thumb-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.track-thumb-button .track-thumb {
+  width: 100%;
+  height: 100%;
+  transition: filter 0.18s, transform 0.18s;
+}
+
+.track-thumb-state {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.track-thumb-button:hover .track-thumb,
+.track-thumb-button.playing .track-thumb {
+  filter: brightness(0.65);
+  transform: scale(1.04);
+}
+
+.track-thumb-button.playing .track-thumb-state {
+  background: rgba(29,185,84,0.78);
+}
+
 .col-artists {
   font-size: 0.88rem;
   color: var(--text-secondary);

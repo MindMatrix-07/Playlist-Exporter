@@ -6,6 +6,8 @@ let allTracks = [];
 let playlistData = null;
 let aiDetectionInProgress = false;
 let activeMode = 'premium'; // 'premium' or 'web'
+const resultsPreviewAudio = new Audio();
+let activeResultsPreviewButton = null;
 
 // Heuristic Language Detector
 function detectLanguage(title, isrc) {
@@ -389,6 +391,7 @@ async function fetchPlaylist() {
         };
       });
 
+      await enrichMissingPreviewUrls();
       setLoading(false);
       renderResults();
 
@@ -485,10 +488,15 @@ function renderResults() {
     const row = document.createElement('div');
     row.className = 'track-row';
     row.style.animationDelay = `${Math.min(i * 18, 500)}ms`;
+    const thumbMarkup = track.albumArt
+      ? track.previewUrl
+        ? `<button class="track-thumb-button" type="button" data-preview-url="${escAttr(track.previewUrl)}" aria-label="Play preview for ${escAttr(track.name)}"><img class="track-thumb" src="${escAttr(track.albumArt)}" alt="" /><span class="track-thumb-state">&#9654;</span></button>`
+        : `<img class="track-thumb" src="${escAttr(track.albumArt)}" alt="" title="No preview available" />`
+      : `<div class="track-thumb-placeholder"></div>`;
     row.innerHTML = `
       <span class="col-num">${i + 1}</span>
       <div class="col-title" style="flex-direction: row; align-items: center; gap: 8px;">
-        ${track.albumArt ? `<img class="track-thumb" src="${track.albumArt}" style="width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0;" />` : `<div style="width:28px; height:28px; background: rgba(255,255,255,0.05); border-radius: 4px; flex-shrink: 0;"></div>`}
+        ${thumbMarkup}
         <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1;">
           <span class="track-name" title="${escHtml(track.name)}">${escHtml(track.name)}</span>
           <span class="track-album" title="${escHtml(track.album)}">${escHtml(track.album)}</span>
@@ -510,6 +518,7 @@ function renderResults() {
     `;
     body.appendChild(row);
   });
+  initResultsPreviewControls();
 
   const table = document.querySelector('.tracks-table');
   if (table) {
@@ -521,6 +530,43 @@ function renderResults() {
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
   showToast('Playlist loaded successfully.');
 }
+
+function initResultsPreviewControls() {
+  document.querySelectorAll('.track-thumb-button[data-preview-url]').forEach(button => {
+    button.addEventListener('click', () => {
+      const previewUrl = button.dataset.previewUrl;
+      if (!previewUrl) return;
+      if (activeResultsPreviewButton === button && !resultsPreviewAudio.paused) {
+        stopResultsPreview();
+        return;
+      }
+      stopResultsPreview();
+      activeResultsPreviewButton = button;
+      button.classList.add('playing');
+      const state = button.querySelector('.track-thumb-state');
+      if (state) state.textContent = '\u275a\u275a';
+      resultsPreviewAudio.src = previewUrl;
+      resultsPreviewAudio.play().catch(() => {
+        if (state) state.textContent = '!';
+        setTimeout(stopResultsPreview, 800);
+      });
+    });
+  });
+}
+
+function stopResultsPreview() {
+  resultsPreviewAudio.pause();
+  resultsPreviewAudio.removeAttribute('src');
+  resultsPreviewAudio.load();
+  if (activeResultsPreviewButton) {
+    activeResultsPreviewButton.classList.remove('playing');
+    const state = activeResultsPreviewButton.querySelector('.track-thumb-state');
+    if (state) state.textContent = '\u25b6';
+  }
+  activeResultsPreviewButton = null;
+}
+
+resultsPreviewAudio.addEventListener('ended', stopResultsPreview);
 
 function escHtml(str) {
   if (!str) return '';
