@@ -575,13 +575,15 @@ function formatSpotifyErrorDetails(err) {
   return JSON.stringify(body, null, 2);
 }
 
-function exportToHTML() {
+async function exportToHTML() {
   if (!allTracks.length || !playlistData) return;
 
   const htmlBtn = document.getElementById('htmlBtn');
   if (htmlBtn) htmlBtn.disabled = true;
 
   try {
+    await enrichMissingPreviewUrls();
+
     const playlistName = playlistData.name || 'Playlist';
     const playlistOwner = playlistData.owner?.display_name || 'Unknown';
     const playlistUrl = playlistData.external_urls?.spotify || '';
@@ -653,7 +655,7 @@ function exportToHTML() {
     .song-art, .song img, .art-placeholder, .art-play { width: 44px; height: 44px; border-radius: 5px; object-fit: cover; flex: 0 0 auto; background: var(--line); }
     .art-play { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; cursor: pointer; overflow: hidden; }
     .art-play img { width: 100%; height: 100%; border-radius: 5px; object-fit: cover; display: block; transition: filter .18s, transform .18s; }
-    .art-play .play-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.45); font-size: 16px; font-weight: 800; opacity: 0; transition: opacity .18s; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+    .art-play .play-state { position: absolute; right: 3px; bottom: 3px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.72); font-size: 10px; font-weight: 800; opacity: 1; transition: opacity .18s, background .18s; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
     .art-play:hover img, .art-play.playing img { filter: brightness(.65); transform: scale(1.04); }
     .art-play:hover .play-state, .art-play.playing .play-state { opacity: 1; }
     .art-play.playing .play-state { background: rgba(29,185,84,.72); }
@@ -824,6 +826,68 @@ function exportToHTML() {
   } finally {
     if (htmlBtn) htmlBtn.disabled = false;
   }
+}
+
+async function enrichMissingPreviewUrls() {
+  const missing = allTracks.filter(track => !track.previewUrl && track.name && track.artists);
+  if (!missing.length) return;
+
+  const htmlBtn = document.getElementById('htmlBtn');
+  const originalText = htmlBtn?.querySelector?.('.btn-text')?.textContent || htmlBtn?.textContent || '';
+  setLoading(true, `Finding playable previews (0 / ${missing.length})...`);
+
+  let found = 0;
+  for (let i = 0; i < missing.length; i++) {
+    const track = missing[i];
+    const previewUrl = await findPreviewUrl(track);
+    if (previewUrl) {
+      track.previewUrl = previewUrl;
+      track.previewSource = 'apple_music';
+      found++;
+    }
+    setLoading(true, `Finding playable previews (${i + 1} / ${missing.length})...`);
+  }
+
+  setLoading(false);
+  if (found) showToast(`Added ${found} playable preview${found === 1 ? '' : 's'} to HTML.`);
+  if (htmlBtn?.querySelector?.('.btn-text')) htmlBtn.querySelector('.btn-text').textContent = originalText;
+}
+
+async function findPreviewUrl(track) {
+  const primaryArtist = (track.artists || '').split(',')[0].trim();
+  const term = [track.name, primaryArtist].filter(Boolean).join(' ');
+  if (!term) return '';
+
+  try {
+    const resp = await fetch(`https://itunes.apple.com/search?${new URLSearchParams({
+      term,
+      media: 'music',
+      entity: 'song',
+      limit: '5'
+    })}`);
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    const candidates = data.results || [];
+    const normalizedName = normalizePreviewText(track.name);
+    const normalizedArtist = normalizePreviewText(primaryArtist);
+    const match = candidates.find(item => {
+      const itemName = normalizePreviewText(item.trackName || '');
+      const itemArtist = normalizePreviewText(item.artistName || '');
+      return item.previewUrl && (!normalizedName || itemName.includes(normalizedName) || normalizedName.includes(itemName)) && (!normalizedArtist || itemArtist.includes(normalizedArtist) || normalizedArtist.includes(itemArtist));
+    }) || candidates.find(item => item.previewUrl);
+    return match?.previewUrl || '';
+  } catch (err) {
+    console.warn('[Preview] Failed to find preview:', track.name, err.message);
+    return '';
+  }
+}
+
+function normalizePreviewText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 function downloadTextFile(filename, text, type) {
