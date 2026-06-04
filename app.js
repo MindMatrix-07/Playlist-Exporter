@@ -517,6 +517,7 @@ function exportToHTML() {
     const exportedAt = new Date().toLocaleString();
     const safeName = makeSafeFilename(playlistName);
     const storageKey = `playlist-checklist:${safeName}:${allTracks.length}`;
+    const spotifyLogoUrl = new URL('Spotify_Primary_Logo_RGB_White.png', window.location.href).href;
 
     const rows = allTracks.map((track, index) => {
       const language = track.language || detectLanguage(track.name, track.isrc);
@@ -554,7 +555,7 @@ function exportToHTML() {
     .head { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto; gap: 20px; align-items: center; }
     .cover { width: 86px; height: 86px; border-radius: 8px; object-fit: cover; background: #202436; }
     .spotify-mark { width: 86px; height: 86px; display: flex; align-items: center; justify-content: center; }
-    .spotify-mark img { max-width: 86px; max-height: 86px; object-fit: contain; display: block; }
+    .spotify-mark img { width: 86px; height: 86px; object-fit: contain; display: block; }
     h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.15; }
     .meta { margin: 0; color: #b8c0d4; font-size: 14px; }
     main { max-width: 1180px; margin: 24px auto 48px; padding: 0 18px; }
@@ -588,7 +589,7 @@ function exportToHTML() {
         <p class="meta">By ${escHtml(playlistOwner)} · ${allTracks.length} tracks · Exported ${escHtml(exportedAt)}${playlistUrl ? ` · <a href="${escAttr(playlistUrl)}" target="_blank" rel="noopener" style="color:#7df0a2">Open playlist</a>` : ''}</p>
       </div>
       <div class="spotify-mark">
-        <img id="spotifyLogo" src="https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Full_Logo_RGB_White-768x381.png" alt="Spotify">
+        <img src="${escAttr(spotifyLogoUrl)}" alt="Spotify">
       </div>
     </div>
   </header>
@@ -608,13 +609,9 @@ function exportToHTML() {
   <script>
     const storageKey = ${JSON.stringify(storageKey)};
     const themeKey = storageKey + ':theme';
-    const darkLogo = 'https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Full_Logo_RGB_White-768x381.png';
-    const lightLogo = 'https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Primary_Logo_RGB_Black.png';
     const themeToggle = document.getElementById('themeToggle');
-    const spotifyLogo = document.getElementById('spotifyLogo');
     function applyTheme(theme) {
       document.documentElement.dataset.theme = theme;
-      spotifyLogo.src = theme === 'dark' ? darkLogo : lightLogo;
       themeToggle.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
       localStorage.setItem(themeKey, theme);
     }
