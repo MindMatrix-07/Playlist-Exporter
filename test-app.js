@@ -819,10 +819,12 @@ let hasExtension = false;
 const pendingRequests = new Map();
 
 function checkExtensionPresence() {
+  const isNativeExt = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
+  const isPresent = isNativeExt || hasExtension;
   const container = document.getElementById('aiModeInstallContainer');
   const toggleContainer = document.getElementById('aiModeContainer');
 
-  if (hasExtension) {
+  if (isPresent) {
     if (container) container.style.display = 'none';
     if (toggleContainer) toggleContainer.style.display = 'block';
   } else {
@@ -845,6 +847,23 @@ function initAiToggleListener() {
 }
 
 function askGoogleAiLang(song, artists) {
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { type: 'ASK_GOOGLE_AI_LANG', song, artists },
+        (res) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else if (res && res.ok) {
+            resolve(res.language);
+          } else {
+            reject(new Error(res?.error || 'AI Mode failed.'));
+          }
+        }
+      );
+    });
+  }
+
   return new Promise((resolve, reject) => {
     const key = `${song}||${artists}`;
     const timeout = setTimeout(() => {
@@ -854,11 +873,7 @@ function askGoogleAiLang(song, artists) {
 
     pendingRequests.set(key, { resolve, reject, timeout });
 
-    window.postMessage({
-      type: "TO_EXT_AI_LANG_REQUEST",
-      song,
-      artists
-    }, "*");
+    window.postMessage({ type: "FROM_PAGE_ASK_AI_LANG", song, artists }, "*");
   });
 }
 

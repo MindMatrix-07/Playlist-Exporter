@@ -12,7 +12,7 @@ window.addEventListener("message", (event) => {
     window.postMessage({ type: "PONG_PLAYLIST_EXPORTER_EXT" }, "*");
   }
 
-  if (event.data?.type === "FROM_PAGE_ASK_AI_LANG") {
+  if (event.data?.type === "FROM_PAGE_ASK_AI_LANG" || event.data?.type === "TO_EXT_AI_LANG_REQUEST") {
     const { song, artists } = event.data;
 
     chrome.runtime.sendMessage(

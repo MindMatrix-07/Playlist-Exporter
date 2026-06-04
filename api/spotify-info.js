@@ -109,10 +109,12 @@ module.exports = async (req, res) => {
     // Step 3: Build final track list
     const items = rawTracks.map((t, i) => {
       const { isrc, albumArt, albumName, trackUrl } = trackDetails[i];
+      const artistNames = normalizeArtists(t);
+
       return {
         track: {
           name: t.name || 'Unknown',
-          artists: [{ name: t.artist || 'Unknown Artist' }],
+          artists: artistNames.map(name => ({ name })),
           album: { name: albumName || 'Unknown Album' },
           external_urls: { spotify: trackUrl },
           external_ids: { isrc },
@@ -143,4 +145,32 @@ module.exports = async (req, res) => {
 // Helper: pause execution for given milliseconds
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function normalizeArtists(track) {
+  const candidates = [
+    track.artists,
+    track.artist,
+    track.subtitle,
+    track.author,
+    track.byLine
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      const names = candidate
+        .map(item => typeof item === 'string' ? item : item?.name)
+        .filter(Boolean);
+      if (names.length) return names;
+    }
+
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate
+        .split(/\s*,\s*|\s+&\s+|\s+feat\.?\s+/i)
+        .map(name => name.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return ['Unknown Artist'];
 }
