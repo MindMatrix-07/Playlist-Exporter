@@ -170,10 +170,12 @@ function setFetchMode(mode) {
     premiumBtn.classList.add('active');
     webBtn.classList.remove('active');
     document.getElementById('webFetchInfoBox').style.display = 'none';
+    document.getElementById('webFetchRenderNote').style.display = 'none';
   } else {
     premiumBtn.classList.remove('active');
     webBtn.classList.add('active');
     document.getElementById('webFetchInfoBox').style.display = 'flex';
+    document.getElementById('webFetchRenderNote').style.display = 'flex';
   }
 
   updateAuthUI();
