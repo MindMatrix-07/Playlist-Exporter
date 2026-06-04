@@ -29,69 +29,82 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const playlistId = extractPlaylistId(url);
-    if (!playlistId) {
-      return res.status(400).json({ error: 'Invalid playlist URL format.' });
-    }
-
     if (!spotifyUrlInfo) {
       throw new Error('spotify-url-info is not installed or failed to load.');
     }
 
-    // Step 1: Scrape first (spotify-url-info)
-    console.log('Scraping playlist info via spotify-url-info...');
+    // Step 1: Scrape playlist info and tracks
+    console.log('Scraping playlist via spotify-url-info...');
     const playlistData = await spotifyUrlInfo.getData(url);
     const rawTracks = await spotifyUrlInfo.getTracks(url);
     const playlistImage = playlistData.coverArt?.sources?.[0]?.url || '';
 
-    // Step 2: Extract track IDs
-    const trackIds = rawTracks
-      .map(t => t.uri ? t.uri.split(':').pop() : '')
-      .filter(id => id && /^[a-zA-Z0-9]{22}$/.test(id));
-
-    // Step 3: Fetch credentials if configured
+    // Step 2: Fetch individual track cover art via /api/spotify/lookup if env credentials available
+    // Otherwise fall back to playlist cover image
     const clientId = process.env.SPOTIFY_CLIENT_ID;
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-    let detailsMap = {};
+    let albumArtMap = {};
 
-    let usedCredentials = false;
-    let debugInfo = {
-      hasClientId: !!clientId,
-      hasClientSecret: !!clientSecret,
-      error: null
-    };
-
-    if (clientId && clientSecret && trackIds.length > 0) {
-      console.log('Developer credentials found. Fetching ISRCs in chunks...');
+    if (clientId && clientSecret) {
       try {
         const token = await getClientCredentialsToken(clientId, clientSecret);
-        detailsMap = await fetchIsrcsAndAlbumArt(token, trackIds);
-        usedCredentials = true;
-      } catch (credError) {
-        console.error('Spotify API Credentials flow failed:', credError.message);
-        debugInfo.error = credError.message;
+        const trackIds = rawTracks
+          .map(t => t.uri ? t.uri.split(':').pop() : '')
+          .filter(id => id && /^[a-zA-Z0-9]{22}$/.test(id));
+
+        for (let i = 0; i < trackIds.length; i += 50) {
+          const chunk = trackIds.slice(i, i + 50);
+          const resp = await fetch(`https://api.spotify.com/v1/tracks?ids=${chunk.join(',')}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            (data.tracks || []).forEach(t => {
+              if (t && t.id) {
+                albumArtMap[t.id] = t.album?.images?.[t.album.images.length - 1]?.url
+                  || t.album?.images?.[0]?.url || '';
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Album art lookup failed, using playlist image as fallback:', e.message);
       }
     }
 
-    // Step 4: Map back to tracks
-    const items = rawTracks.map(t => {
+    // Step 3: Fetch ISRCs in parallel from boost-collective API (no auth needed)
+    console.log('Fetching ISRCs from boost-collective...');
+    const isrcResults = await Promise.all(
+      rawTracks.map(async (t) => {
+        const trackName = t.name || '';
+        const artistName = t.artist || '';
+        if (!trackName) return '—';
+        try {
+          const isrc = await fetchIsrcFromBoostCollective(trackName, artistName);
+          return isrc || '—';
+        } catch (e) {
+          return '—';
+        }
+      })
+    );
+
+    // Step 4: Build final track list
+    const items = rawTracks.map((t, i) => {
       const trackId = t.uri ? t.uri.split(':').pop() : '';
-      const details = detailsMap[trackId] || {};
-      
       return {
         track: {
           name: t.name || 'Unknown',
           artists: [{ name: t.artist || 'Unknown Artist' }],
           album: { name: 'Unknown Album' },
           external_urls: { spotify: trackId ? `https://open.spotify.com/track/${trackId}` : '' },
-          external_ids: { isrc: details.isrc || '—' },
-          albumArt: details.albumArt || playlistImage // Fallback to playlist image if no API art is retrieved
+          external_ids: { isrc: isrcResults[i] || '—' },
+          albumArt: (trackId && albumArtMap[trackId]) || playlistImage
         }
       };
     });
 
     return res.status(200).json({
-      source: Object.keys(detailsMap).length > 0 ? 'scraped_with_api_isrc' : 'scraped_only',
+      source: 'scraped_with_isrc_lookup',
       name: playlistData.name || playlistData.title || 'Playlist',
       owner: {
         display_name: playlistData.subtitle || 'Unknown'
@@ -100,8 +113,7 @@ module.exports = async (req, res) => {
       tracks: {
         total: items.length,
         items: items
-      },
-      debug: debugInfo
+      }
     });
 
   } catch (err) {
@@ -119,6 +131,23 @@ function extractPlaylistId(urlStr) {
   }
 }
 
+// Fetch ISRC from boost-collective (no auth required)
+async function fetchIsrcFromBoostCollective(trackName, artistName) {
+  const resp = await fetch('https://www.boost-collective.com/api/artist-tools/isrc', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'referer': 'https://www.boost-collective.com/blog/isrc-finder-tool-free',
+      'origin': 'https://www.boost-collective.com',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+    },
+    body: JSON.stringify({ trackName, artistName })
+  });
+  if (!resp.ok) return '—';
+  const data = await resp.json();
+  return data.isrc || '—';
+}
+
 async function getClientCredentialsToken(clientId, clientSecret) {
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const resp = await fetch('https://accounts.spotify.com/api/token', {
@@ -129,37 +158,7 @@ async function getClientCredentialsToken(clientId, clientSecret) {
     },
     body: 'grant_type=client_credentials'
   });
-  if (!resp.ok) {
-    throw new Error('Failed to retrieve Spotify access token.');
-  }
+  if (!resp.ok) throw new Error('Failed to retrieve Spotify access token.');
   const data = await resp.json();
   return data.access_token;
-}
-
-async function fetchIsrcsAndAlbumArt(token, trackIds) {
-  const chunks = [];
-  for (let i = 0; i < trackIds.length; i += 50) {
-    chunks.push(trackIds.slice(i, i + 50));
-  }
-
-  const results = {};
-  for (const chunk of chunks) {
-    const resp = await fetch(`https://api.spotify.com/v1/tracks?ids=${chunk.join(',')}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      throw new Error(`Spotify API tracks lookup failed (HTTP ${resp.status}): ${errText}`);
-    }
-    const data = await resp.json();
-    (data.tracks || []).forEach(t => {
-      if (t && t.id) {
-        results[t.id] = {
-          isrc: t.external_ids?.isrc || '—',
-          albumArt: t.album?.images?.[t.album.images.length - 1]?.url || t.album?.images?.[0]?.url || ''
-        };
-      }
-    });
-  }
-  return results;
 }
