@@ -162,12 +162,12 @@ function disconnectSpotify() {
 
 function setFetchMode(mode) {
   if (mode === 'web' && shouldForwardWebFetchToRender()) {
-    window.location.href = makeModeUrl(RENDER_ORIGIN, 'web', 'web-fetch');
+    window.location.href = makeModeUrl(RENDER_ORIGIN, 'web', 'web-fetch', getCurrentPlaylistUrl());
     return;
   }
 
   if (mode === 'premium' && shouldForwardPremiumToVercel()) {
-    window.location.href = makeModeUrl(VERCEL_ORIGIN, 'premium', '');
+    window.location.href = makeModeUrl(VERCEL_ORIGIN, 'premium', '', getCurrentPlaylistUrl());
     return;
   }
 
@@ -217,7 +217,8 @@ function updateAuthUI() {
 
   // Restore last playlist URL
   const savedUrl = localStorage.getItem('sp_last_url');
-  if (savedUrl) document.getElementById('playlistUrl').value = savedUrl;
+  const requestedPlaylist = getRequestedPlaylistUrl();
+  if (requestedPlaylist || savedUrl) document.getElementById('playlistUrl').value = requestedPlaylist || savedUrl;
 }
 
 function showError(msg, boxId = 'errorBox') {
@@ -275,7 +276,9 @@ async function fetchPlaylistMeta(token, playlistId) {
   if (!resp.ok) {
     const errBody = await resp.json().catch(() => ({}));
     const errMsg = errBody?.error?.message || `HTTP ${resp.status}`;
-    throw new Error(`Failed to load playlist metadata: ${errMsg} (${resp.status})`);
+    const error = new Error(`Failed to load playlist metadata: ${errMsg} (${resp.status})`);
+    error.status = resp.status;
+    throw error;
   }
   return resp.json();
 }
@@ -293,7 +296,9 @@ async function fetchAllTracks(token, playlistId, totalExpected, onProgress) {
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}));
       const errMsg = errBody?.error?.message || `HTTP ${resp.status}`;
-      throw new Error(`Failed to fetch tracks: ${errMsg} (${resp.status})`);
+      const error = new Error(`Failed to fetch tracks: ${errMsg} (${resp.status})`);
+      error.status = resp.status;
+      throw error;
     }
     const data = await resp.json();
 
@@ -424,6 +429,11 @@ async function fetchPlaylist() {
 
     } catch (err) {
       setLoading(false);
+      if (isSpotifyForbiddenError(err)) {
+        showToast('Spotify blocked Premium mode. Opening Web Fetch on Render...');
+        window.location.href = makeModeUrl(RENDER_ORIGIN, 'web', 'web-fetch', rawUrl);
+        return;
+      }
       showError(err.message || 'Something went wrong.', 'errorBox2');
     } finally {
       setFetchBtn(false);
@@ -526,11 +536,24 @@ function shouldForwardPremiumToVercel() {
   return window.location.hostname === 'playlistinfoexporter.onrender.com';
 }
 
-function makeModeUrl(origin, mode, hash) {
+function makeModeUrl(origin, mode, hash, playlistUrl = '') {
   const url = new URL(window.location.pathname || '/', origin);
   url.searchParams.set('mode', mode);
+  if (playlistUrl) url.searchParams.set('playlist', playlistUrl);
   url.hash = hash;
   return url.href;
+}
+
+function getCurrentPlaylistUrl() {
+  return document.getElementById('playlistUrl')?.value.trim() || localStorage.getItem('sp_last_url') || '';
+}
+
+function getRequestedPlaylistUrl() {
+  return new URLSearchParams(window.location.search).get('playlist') || '';
+}
+
+function isSpotifyForbiddenError(err) {
+  return err?.status === 403 || /\bForbidden \(403\)/i.test(err?.message || '');
 }
 
 function exportToHTML() {
@@ -1337,6 +1360,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const defaultMode = shouldForwardPremiumToVercel() ? 'web' : 'premium';
   const savedMode = ['premium', 'web'].includes(requestedMode) ? requestedMode : (localStorage.getItem('sp_fetch_mode') || defaultMode);
   setFetchMode(savedMode);
+  const requestedPlaylist = getRequestedPlaylistUrl();
+  if (requestedPlaylist) {
+    document.getElementById('playlistUrl').value = requestedPlaylist;
+    localStorage.setItem('sp_last_url', requestedPlaylist);
+  }
   if (requestedMode === 'web') {
     setTimeout(() => {
       document.getElementById('playlistCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
