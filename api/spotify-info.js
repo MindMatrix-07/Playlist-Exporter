@@ -54,13 +54,22 @@ module.exports = async (req, res) => {
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
     let detailsMap = {};
 
+    let usedCredentials = false;
+    let debugInfo = {
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
+      error: null
+    };
+
     if (clientId && clientSecret && trackIds.length > 0) {
       console.log('Developer credentials found. Fetching ISRCs in chunks...');
       try {
         const token = await getClientCredentialsToken(clientId, clientSecret);
         detailsMap = await fetchIsrcsAndAlbumArt(token, trackIds);
+        usedCredentials = true;
       } catch (credError) {
-        console.error('Spotify API Credentials flow failed, proceeding with scraped data only:', credError.message);
+        console.error('Spotify API Credentials flow failed:', credError.message);
+        debugInfo.error = credError.message;
       }
     }
 
@@ -91,7 +100,8 @@ module.exports = async (req, res) => {
       tracks: {
         total: items.length,
         items: items
-      }
+      },
+      debug: debugInfo
     });
 
   } catch (err) {
