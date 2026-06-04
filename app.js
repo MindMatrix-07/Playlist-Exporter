@@ -163,18 +163,17 @@ function disconnectSpotify() {
 // ─── Mode Selector ───────────────────────────
 
 function setFetchMode(mode) {
-  if (mode === 'web' && shouldForwardWebFetchToRender()) {
-    window.location.href = makeModeUrl(RENDER_ORIGIN, 'web', 'web-fetch', getCurrentPlaylistUrl());
+  if (mode === 'web' && window.location.hostname !== 'playlistinfoexporter.onrender.com') {
+    window.location.href = RENDER_ORIGIN + '/';
     return;
   }
 
-  if (mode === 'premium' && shouldForwardPremiumToVercel()) {
-    window.location.href = makeModeUrl(VERCEL_ORIGIN, 'premium', '', getCurrentPlaylistUrl());
+  if (mode === 'premium' && window.location.hostname !== 'playlistinfoexporter.vercel.app') {
+    window.location.href = VERCEL_ORIGIN + '/';
     return;
   }
 
   activeMode = mode;
-  localStorage.setItem('sp_fetch_mode', mode);
 
   // Toggle active class on buttons
   const premiumBtn = document.getElementById('modePremiumBtn');
@@ -219,8 +218,7 @@ function updateAuthUI() {
 
   // Restore last playlist URL
   const savedUrl = localStorage.getItem('sp_last_url');
-  const requestedPlaylist = getRequestedPlaylistUrl();
-  if (requestedPlaylist || savedUrl) document.getElementById('playlistUrl').value = requestedPlaylist || savedUrl;
+  if (savedUrl) document.getElementById('playlistUrl').value = savedUrl;
 }
 
 function showError(msg, boxId = 'errorBox') {
@@ -234,12 +232,11 @@ function showError(msg, boxId = 'errorBox') {
 
 function showSpotifyApiError(err, rawUrl) {
   const details = formatSpotifyErrorDetails(err);
-  const fallbackUrl = makeModeUrl(RENDER_ORIGIN, 'web', 'web-fetch', rawUrl);
   showError(`
     <div>
       <div><strong>Spotify API error:</strong> ${escHtml(err.message || 'Unknown error')}</div>
       ${details ? `<pre style="margin:10px 0 0;white-space:pre-wrap;font:12px/1.45 Consolas,monospace;color:#fecaca;">${escHtml(details)}</pre>` : ''}
-      <a href="${escAttr(fallbackUrl)}" style="display:inline-flex;margin-top:10px;color:#fca5a5;font-weight:700;">Open with Render Web Fetch</a>
+      <a href="${RENDER_ORIGIN}/" style="display:inline-flex;margin-top:10px;color:#fca5a5;font-weight:700;">Open with Render Web Fetch</a>
     </div>
   `, 'errorBox2');
 }
@@ -585,30 +582,6 @@ function copyToClipboard() {
   navigator.clipboard.writeText(text)
     .then(() => showToast('Copied list tab-separated to clipboard.'))
     .catch(() => showToast('Failed to copy. Please copy manually.'));
-}
-
-function shouldForwardWebFetchToRender() {
-  return window.location.hostname === 'playlistinfoexporter.vercel.app';
-}
-
-function shouldForwardPremiumToVercel() {
-  return window.location.hostname === 'playlistinfoexporter.onrender.com';
-}
-
-function makeModeUrl(origin, mode, hash, playlistUrl = '') {
-  const url = new URL(window.location.pathname || '/', origin);
-  url.searchParams.set('mode', mode);
-  if (playlistUrl) url.searchParams.set('playlist', playlistUrl);
-  url.hash = hash;
-  return url.href;
-}
-
-function getCurrentPlaylistUrl() {
-  return document.getElementById('playlistUrl')?.value.trim() || localStorage.getItem('sp_last_url') || '';
-}
-
-function getRequestedPlaylistUrl() {
-  return new URLSearchParams(window.location.search).get('playlist') || '';
 }
 
 function isSpotifyForbiddenError(err) {
@@ -1483,22 +1456,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const el = document.getElementById('redirectUriDisplay');
   if (el) el.textContent = window.location.origin;
 
-  // Load URL-requested mode, saved mode, or fallback to premium
-  const params = new URLSearchParams(window.location.search);
-  const requestedMode = params.get('mode');
-  const defaultMode = shouldForwardPremiumToVercel() ? 'web' : 'premium';
-  const savedMode = ['premium', 'web'].includes(requestedMode) ? requestedMode : (localStorage.getItem('sp_fetch_mode') || defaultMode);
-  setFetchMode(savedMode);
-  const requestedPlaylist = getRequestedPlaylistUrl();
-  if (requestedPlaylist) {
-    document.getElementById('playlistUrl').value = requestedPlaylist;
-    localStorage.setItem('sp_last_url', requestedPlaylist);
-  }
-  if (requestedMode === 'web') {
-    setTimeout(() => {
-      document.getElementById('playlistCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 150);
-  }
+  const defaultMode = window.location.hostname === 'playlistinfoexporter.onrender.com' ? 'web' : 'premium';
+  setFetchMode(defaultMode);
 
   // Handle OAuth callback if page has params
   await handleCallback();
