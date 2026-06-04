@@ -1,8 +1,13 @@
 {
+  "functions": {
+    "api/spotify-info.js": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     { "source": "/api/spotify-info", "destination": "/api/spotify-info.js" },
     { "source": "/test.html", "destination": "/test.html" },
     { "source": "/test-app.js", "destination": "/test-app.js" },
-    { "source": "/((?!api/|test\\.html|test-app\\.js|.*\\.css|.*\\.zip|.*\\.png|.*\\.jpg|.*\\.js).*)" , "destination": "/index.html" }
+    { "source": "/((?!api/|test\\.html|test-app\\.js|.*\\.css|.*\\.zip|.*\\.png|.*\\.jpg|.*\\.js).*)", "destination": "/index.html" }
   ]
 }

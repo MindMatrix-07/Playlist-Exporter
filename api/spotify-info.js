@@ -56,8 +56,8 @@ module.exports = async (req, res) => {
     // Step 2: For each track, call soundplate API in batches of 5 to avoid rate limiting
     console.log(`Fetching ISRC + album art for ${rawTracks.length} tracks via soundplate (batched)...`);
 
-    const BATCH_SIZE = 5;
-    const BATCH_DELAY_MS = 300;
+    const BATCH_SIZE = 10;
+    const BATCH_DELAY_MS = 150;
     const trackDetails = [];
 
     for (let i = 0; i < rawTracks.length; i += BATCH_SIZE) {
@@ -85,6 +85,7 @@ module.exports = async (req, res) => {
               return {
                 isrc: data.isrc || '—',
                 albumArt: data.artwork_url || playlistImage,
+                albumName: data.album || 'Unknown Album',
                 trackUrl
               };
             } catch (e) {
@@ -93,7 +94,7 @@ module.exports = async (req, res) => {
               }
             }
           }
-          return { isrc: '—', albumArt: playlistImage, trackUrl };
+          return { isrc: '—', albumArt: playlistImage, albumName: 'Unknown Album', trackUrl };
         })
       );
 
@@ -107,12 +108,12 @@ module.exports = async (req, res) => {
 
     // Step 3: Build final track list
     const items = rawTracks.map((t, i) => {
-      const { isrc, albumArt, trackUrl } = trackDetails[i];
+      const { isrc, albumArt, albumName, trackUrl } = trackDetails[i];
       return {
         track: {
           name: t.name || 'Unknown',
           artists: [{ name: t.artist || 'Unknown Artist' }],
-          album: { name: 'Unknown Album' },
+          album: { name: albumName || 'Unknown Album' },
           external_urls: { spotify: trackUrl },
           external_ids: { isrc },
           albumArt
