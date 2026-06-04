@@ -34,79 +34,55 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'Invalid playlist URL format.' });
     }
 
-    const clientId = process.env.SPOTIFY_CLIENT_ID;
-    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-
-    let usedCredentials = false;
-    let playlistMeta = null;
-    let allTracks = null;
-
-    if (clientId && clientSecret) {
-      console.log('Attempting official Spotify Client Credentials flow...');
-      try {
-        const token = await getClientCredentialsToken(clientId, clientSecret);
-        playlistMeta = await fetchPlaylistMeta(token, playlistId);
-        allTracks = await fetchAllTracks(token, playlistId);
-        usedCredentials = true;
-      } catch (credError) {
-        console.error('Spotify API Credentials flow failed, falling back to scraping:', credError.message);
-      }
-    }
-
-    if (usedCredentials && playlistMeta && allTracks) {
-      return res.status(200).json({
-        source: 'api_credentials',
-        name: playlistMeta.name,
-        owner: {
-          display_name: playlistMeta.owner?.display_name || 'Unknown'
-        },
-        images: playlistMeta.images || [],
-        tracks: {
-          total: allTracks.length,
-          items: allTracks.map(t => ({
-            track: {
-              name: t.name,
-              artists: t.artists,
-              album: { name: t.album },
-              external_urls: { spotify: t.url },
-              external_ids: { isrc: t.isrc },
-              albumArt: t.albumArt
-            }
-          }))
-        }
-      });
-    }
-
-    // FALLBACK SCRAPER FLOW
-    console.log('Using spotify-url-info scraping...');
     if (!spotifyUrlInfo) {
       throw new Error('spotify-url-info is not installed or failed to load.');
     }
 
+    // Step 1: Scrape first (spotify-url-info)
+    console.log('Scraping playlist info via spotify-url-info...');
     const playlistData = await spotifyUrlInfo.getData(url);
     const rawTracks = await spotifyUrlInfo.getTracks(url);
-
     const playlistImage = playlistData.coverArt?.sources?.[0]?.url || '';
 
+    // Step 2: Extract track IDs
+    const trackIds = rawTracks
+      .map(t => t.uri ? t.uri.split(':').pop() : '')
+      .filter(id => id && /^[a-zA-Z0-9]{22}$/.test(id));
+
+    // Step 3: Fetch credentials if configured
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+    let detailsMap = {};
+
+    if (clientId && clientSecret && trackIds.length > 0) {
+      console.log('Developer credentials found. Fetching ISRCs in chunks...');
+      try {
+        const token = await getClientCredentialsToken(clientId, clientSecret);
+        detailsMap = await fetchIsrcsAndAlbumArt(token, trackIds);
+      } catch (credError) {
+        console.error('Spotify API Credentials flow failed, proceeding with scraped data only:', credError.message);
+      }
+    }
+
+    // Step 4: Map back to tracks
     const items = rawTracks.map(t => {
-      // Extract track ID from URI (e.g. "spotify:track:ID")
       const trackId = t.uri ? t.uri.split(':').pop() : '';
-      const trackUrl = trackId ? `https://open.spotify.com/track/${trackId}` : '';
+      const details = detailsMap[trackId] || {};
       
       return {
         track: {
           name: t.name || 'Unknown',
           artists: [{ name: t.artist || 'Unknown Artist' }],
           album: { name: 'Unknown Album' },
-          external_urls: { spotify: trackUrl },
-          external_ids: { isrc: '—' },
-          albumArt: playlistImage // Use playlist image as fallback cover art
+          external_urls: { spotify: trackId ? `https://open.spotify.com/track/${trackId}` : '' },
+          external_ids: { isrc: details.isrc || '—' },
+          albumArt: details.albumArt || playlistImage // Fallback to playlist image if no API art is retrieved
         }
       };
     });
 
     return res.status(200).json({
-      source: 'spotify_url_info',
+      source: Object.keys(detailsMap).length > 0 ? 'scraped_with_api_isrc' : 'scraped_only',
       name: playlistData.name || playlistData.title || 'Playlist',
       owner: {
         display_name: playlistData.subtitle || 'Unknown'
@@ -117,6 +93,7 @@ module.exports = async (req, res) => {
         items: items
       }
     });
+
   } catch (err) {
     console.error('Error fetching playlist data:', err);
     return res.status(500).json({ error: err.message || 'Server error fetching playlist.' });
@@ -149,49 +126,32 @@ async function getClientCredentialsToken(clientId, clientSecret) {
   return data.access_token;
 }
 
-async function fetchPlaylistMeta(token, playlistId) {
-  const resp = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,owner.display_name,images`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  if (!resp.ok) {
-    throw new Error('Failed to fetch playlist metadata.');
+async function fetchIsrcsAndAlbumArt(token, trackIds) {
+  const chunks = [];
+  for (let i = 0; i < trackIds.length; i += 50) {
+    chunks.push(trackIds.slice(i, i + 50));
   }
-  return resp.json();
-}
 
-async function fetchAllTracks(token, playlistId) {
-  let tracks = [];
-  let offset = 0;
-  const limit = 100;
-
-  while (true) {
-    const resp = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=${limit}&offset=${offset}&fields=next,items(track(name,id,artists(name),album(name,images),external_urls.spotify,external_ids.isrc))`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!resp.ok) {
-      throw new Error('Failed to fetch playlist tracks.');
+  const results = {};
+  for (const chunk of chunks) {
+    try {
+      const resp = await fetch(`https://api.spotify.com/v1/tracks?ids=${chunk.join(',')}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        (data.tracks || []).forEach(t => {
+          if (t && t.id) {
+            results[t.id] = {
+              isrc: t.external_ids?.isrc || '—',
+              albumArt: t.album?.images?.[t.album.images.length - 1]?.url || t.album?.images?.[0]?.url || ''
+            };
+          }
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching chunk details from Spotify:', e.message);
     }
-    const data = await resp.json();
-    const items = (data.items || []).filter(i => i && i.track && i.track.id);
-    
-    tracks = tracks.concat(items.map(i => {
-      const t = i.track;
-      const isrc = t.external_ids?.isrc || '—';
-      const albumArt = t.album?.images?.[t.album.images.length - 1]?.url || t.album?.images?.[0]?.url || '';
-      return {
-        name: t.name || 'Unknown',
-        artists: (t.artists || []).map(a => ({ name: a.name })),
-        album: t.album?.name || '',
-        albumArt: albumArt,
-        url: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
-        isrc: isrc
-      };
-    }));
-
-    if (!data.next) break;
-    offset += limit;
   }
-
-  return tracks;
+  return results;
 }
