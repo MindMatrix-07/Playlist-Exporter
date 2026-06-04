@@ -546,28 +546,30 @@ function exportToHTML() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escHtml(playlistName)} Checklist</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, Arial, sans-serif; --green:#1db954; --ink:#101828; --muted:#667085; --line:#e4e7ec; --soft:#f8fafc; }
+    :root { color-scheme: light; font-family: Inter, Arial, sans-serif; --green:#1db954; --ink:#101828; --muted:#667085; --line:#e4e7ec; --soft:#f8fafc; --page:#f3f6f8; --panel:#ffffff; --head:#ffffff; --brand-bg:#f8fafc; --brand-border:#d0d5dd; --brand-filter:none; }
+    html[data-theme="dark"] { color-scheme: dark; --ink:#f4f6fb; --muted:#a6acc7; --line:#2a2f3a; --soft:#11141b; --page:#070910; --panel:#141720; --head:#0a0a14; --brand-bg:#0a0a14; --brand-border:#3b4252; --brand-filter:none; }
     * { box-sizing: border-box; }
-    body { margin: 0; color: var(--ink); background: #f3f6f8; }
+    body { margin: 0; color: var(--ink); background: var(--page); }
     header { background: #0a0a14; color: white; padding: 28px 32px; border-top: 12px solid var(--green); }
     .head { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto; gap: 20px; align-items: center; }
     .cover { width: 86px; height: 86px; border-radius: 8px; object-fit: cover; background: #202436; }
-    .spotify-mark { width: 86px; height: 86px; border-radius: 50%; border: 2px solid rgba(255,255,255,.82); display: flex; align-items: center; justify-content: center; opacity: .92; }
-    .spotify-mark svg { width: 56px; height: 56px; display: block; }
+    .spotify-mark { width: 86px; height: 86px; display: flex; align-items: center; justify-content: center; }
+    .spotify-mark img { max-width: 86px; max-height: 86px; object-fit: contain; display: block; }
     h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.15; }
     .meta { margin: 0; color: #b8c0d4; font-size: 14px; }
     main { max-width: 1180px; margin: 24px auto 48px; padding: 0 18px; }
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
     .toolbar p { margin: 0; color: var(--muted); font-size: 14px; }
-    .clear { border: 1px solid var(--line); background: white; border-radius: 7px; padding: 9px 12px; cursor: pointer; }
-    table { width: 100%; border-collapse: collapse; background: white; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 32px rgba(16,24,40,.08); }
+    .toolbar-actions { display:flex; gap:10px; align-items:center; }
+    .clear, .theme-toggle { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 9px 12px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 32px rgba(16,24,40,.08); }
     th { background: var(--green); color: white; text-align: left; font-size: 13px; padding: 11px 10px; }
     td { border-top: 1px solid var(--line); padding: 10px; vertical-align: middle; font-size: 14px; }
-    tr.done { background: #f0fdf4; }
+    tr.done { background: rgba(29,185,84,.10); }
     tr.done .song strong { text-decoration: line-through; color: var(--muted); }
     .num { width: 42px; color: var(--muted); }
     .song { display: flex; gap: 10px; align-items: center; min-width: 280px; }
-    .song img, .art-placeholder { width: 44px; height: 44px; border-radius: 5px; object-fit: cover; flex: 0 0 auto; background: #e4e7ec; }
+    .song img, .art-placeholder { width: 44px; height: 44px; border-radius: 5px; object-fit: cover; flex: 0 0 auto; background: var(--line); }
     .song strong { display: block; margin-bottom: 4px; }
     .song span { color: var(--muted); font-size: 12px; }
     code { color: #00897b; font-weight: 700; font-family: inherit; }
@@ -585,20 +587,18 @@ function exportToHTML() {
         <h1>${escHtml(playlistName)}</h1>
         <p class="meta">By ${escHtml(playlistOwner)} · ${allTracks.length} tracks · Exported ${escHtml(exportedAt)}${playlistUrl ? ` · <a href="${escAttr(playlistUrl)}" target="_blank" rel="noopener" style="color:#7df0a2">Open playlist</a>` : ''}</p>
       </div>
-      <div class="spotify-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="11" stroke="white" stroke-width="1.4"/>
-          <path d="M7 9.25c3.25-1 6.4-.72 9.45.85" stroke="white" stroke-width="1.55" stroke-linecap="round"/>
-          <path d="M7.45 12c2.65-.78 5.2-.55 7.7.7" stroke="white" stroke-width="1.35" stroke-linecap="round"/>
-          <path d="M7.9 14.55c2.02-.55 4-.37 5.95.55" stroke="white" stroke-width="1.15" stroke-linecap="round"/>
-        </svg>
+      <div class="spotify-mark">
+        <img id="spotifyLogo" src="https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Full_Logo_RGB_White-768x381.png" alt="Spotify">
       </div>
     </div>
   </header>
   <main>
     <div class="toolbar">
       <p>Done ticks are saved in this browser for this HTML checklist.</p>
-      <button class="clear" id="clearDone">Clear Done</button>
+      <div class="toolbar-actions">
+        <button class="theme-toggle" id="themeToggle">Dark Mode</button>
+        <button class="clear" id="clearDone">Clear Done</button>
+      </div>
     </div>
     <table>
       <thead><tr><th>#</th><th>Song</th><th>Artists</th><th>ISRC</th><th>Language</th><th>Spotify</th><th>Done</th></tr></thead>
@@ -607,6 +607,21 @@ function exportToHTML() {
   </main>
   <script>
     const storageKey = ${JSON.stringify(storageKey)};
+    const themeKey = storageKey + ':theme';
+    const darkLogo = 'https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Full_Logo_RGB_White-768x381.png';
+    const lightLogo = 'https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Primary_Logo_RGB_Black.png';
+    const themeToggle = document.getElementById('themeToggle');
+    const spotifyLogo = document.getElementById('spotifyLogo');
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      spotifyLogo.src = theme === 'dark' ? darkLogo : lightLogo;
+      themeToggle.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+      localStorage.setItem(themeKey, theme);
+    }
+    applyTheme(localStorage.getItem(themeKey) || 'light');
+    themeToggle.addEventListener('click', () => {
+      applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+    });
     const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
     const boxes = document.querySelectorAll('input[type="checkbox"][data-track-key]');
     function syncRow(box) { box.closest('tr').classList.toggle('done', box.checked); }
