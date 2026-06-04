@@ -53,39 +53,57 @@ module.exports = async (req, res) => {
     ]);
     const playlistImage = playlistData.coverArt?.sources?.[0]?.url || '';
 
-    // Step 2: For each track, call soundplate API to get ISRC + album art
-    console.log(`Fetching ISRC + album art for ${rawTracks.length} tracks via soundplate...`);
+    // Step 2: For each track, call soundplate API in batches of 5 to avoid rate limiting
+    console.log(`Fetching ISRC + album art for ${rawTracks.length} tracks via soundplate (batched)...`);
 
-    const trackDetails = await Promise.all(
-      rawTracks.map(async (t) => {
-        const trackId = t.uri ? t.uri.split(':').pop() : '';
-        const trackUrl = trackId ? `https://open.spotify.com/track/${trackId}` : '';
+    const BATCH_SIZE = 5;
+    const BATCH_DELAY_MS = 300;
+    const trackDetails = [];
 
-        if (!trackUrl) {
-          return { isrc: '—', albumArt: playlistImage, trackUrl: '' };
-        }
+    for (let i = 0; i < rawTracks.length; i += BATCH_SIZE) {
+      const batch = rawTracks.slice(i, i + BATCH_SIZE);
 
-        try {
-          const resp = await fetch(
-            `${SOUNDPLATE_API}?q=${encodeURIComponent(trackUrl)}`,
-            { headers: SOUNDPLATE_HEADERS }
-          );
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const data = await resp.json();
+      const batchResults = await Promise.all(
+        batch.map(async (t) => {
+          const trackId = t.uri ? t.uri.split(':').pop() : '';
+          const trackUrl = trackId ? `https://open.spotify.com/track/${trackId}` : '';
 
-          if (data.error) throw new Error(data.error);
+          if (!trackUrl) return { isrc: '—', albumArt: playlistImage, trackUrl: '' };
 
-          return {
-            isrc: data.isrc || '—',
-            albumArt: data.artwork_url || playlistImage,
-            trackUrl
-          };
-        } catch (e) {
-          console.warn(`Failed to get details for track ${trackId}:`, e.message);
+          // Try up to 2 times
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              if (attempt > 0) await sleep(500); // wait before retry
+              const resp = await fetch(
+                `${SOUNDPLATE_API}?q=${encodeURIComponent(trackUrl)}`,
+                { headers: SOUNDPLATE_HEADERS }
+              );
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              const data = await resp.json();
+              if (data.error) throw new Error(data.error);
+
+              return {
+                isrc: data.isrc || '—',
+                albumArt: data.artwork_url || playlistImage,
+                trackUrl
+              };
+            } catch (e) {
+              if (attempt === 1) {
+                console.warn(`Failed for track ${trackId} after 2 attempts:`, e.message);
+              }
+            }
+          }
           return { isrc: '—', albumArt: playlistImage, trackUrl };
-        }
-      })
-    );
+        })
+      );
+
+      trackDetails.push(...batchResults);
+
+      // Delay between batches (skip after the last batch)
+      if (i + BATCH_SIZE < rawTracks.length) {
+        await sleep(BATCH_DELAY_MS);
+      }
+    }
 
     // Step 3: Build final track list
     const items = rawTracks.map((t, i) => {
@@ -120,3 +138,8 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: err.message || 'Server error fetching playlist.' });
   }
 };
+
+// Helper: pause execution for given milliseconds
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
