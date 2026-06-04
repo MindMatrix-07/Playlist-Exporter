@@ -570,6 +570,9 @@ function addDoneCheckbox(doc, fieldName, x, y, size) {
       checkbox.value = 'Off';
       checkbox.appearanceState = 'Off';
       checkbox.defaultValue = 'Off';
+      checkbox.readOnly = false;
+      checkbox.required = false;
+      checkbox.noToggleToOff = false;
       doc.addField(checkbox);
       return;
     } catch (err) {
@@ -830,7 +833,7 @@ async function exportToPDF() {
 
     y += 6; checkPage(14);
     doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(160,160,180);
-    const disclaimerBlock = doc.splitTextToSize('Disclaimer: The track info, links and ISRCs are retrieved from public Spotify indexes. AI language detection is search-based and is a best-effort prediction that may contain inaccuracies.', cW);
+    const disclaimerBlock = doc.splitTextToSize('Disclaimer: The track info, links and ISRCs are retrieved from public Spotify indexes. AI language detection is search-based and is a best-effort prediction that may contain inaccuracies. Save the PDF after ticking Done boxes to keep those marks next time you open it.', cW);
     doc.text(disclaimerBlock, mL, y);
 
     // Apply footer numbers & links to all pages after rendering
