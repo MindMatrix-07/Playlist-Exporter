@@ -37,12 +37,23 @@ module.exports = async (req, res) => {
     const clientId = process.env.SPOTIFY_CLIENT_ID;
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
+    let usedCredentials = false;
+    let playlistMeta = null;
+    let allTracks = null;
+
     if (clientId && clientSecret) {
-      console.log('Using official Spotify Client Credentials flow...');
-      const token = await getClientCredentialsToken(clientId, clientSecret);
-      const playlistMeta = await fetchPlaylistMeta(token, playlistId);
-      const allTracks = await fetchAllTracks(token, playlistId);
-      
+      console.log('Attempting official Spotify Client Credentials flow...');
+      try {
+        const token = await getClientCredentialsToken(clientId, clientSecret);
+        playlistMeta = await fetchPlaylistMeta(token, playlistId);
+        allTracks = await fetchAllTracks(token, playlistId);
+        usedCredentials = true;
+      } catch (credError) {
+        console.error('Spotify API Credentials flow failed, falling back to scraping:', credError.message);
+      }
+    }
+
+    if (usedCredentials && playlistMeta && allTracks) {
       return res.status(200).json({
         source: 'api_credentials',
         name: playlistMeta.name,
@@ -64,47 +75,48 @@ module.exports = async (req, res) => {
           }))
         }
       });
-    } else {
-      console.log('Falling back to spotify-url-info scraping...');
-      if (!spotifyUrlInfo) {
-        throw new Error('spotify-url-info is not installed or failed to load.');
-      }
-
-      const playlistData = await spotifyUrlInfo.getData(url);
-      const rawTracks = await spotifyUrlInfo.getTracks(url);
-
-      const playlistImage = playlistData.coverArt?.sources?.[0]?.url || '';
-
-      const items = rawTracks.map(t => {
-        // Extract track ID from URI (e.g. "spotify:track:ID")
-        const trackId = t.uri ? t.uri.split(':').pop() : '';
-        const trackUrl = trackId ? `https://open.spotify.com/track/${trackId}` : '';
-        
-        return {
-          track: {
-            name: t.name || 'Unknown',
-            artists: [{ name: t.artist || 'Unknown Artist' }],
-            album: { name: 'Unknown Album' },
-            external_urls: { spotify: trackUrl },
-            external_ids: { isrc: '—' },
-            albumArt: playlistImage // Use playlist image as fallback cover art
-          }
-        };
-      });
-
-      return res.status(200).json({
-        source: 'spotify_url_info',
-        name: playlistData.name || playlistData.title || 'Playlist',
-        owner: {
-          display_name: playlistData.subtitle || 'Unknown'
-        },
-        images: [{ url: playlistImage }],
-        tracks: {
-          total: items.length,
-          items: items
-        }
-      });
     }
+
+    // FALLBACK SCRAPER FLOW
+    console.log('Using spotify-url-info scraping...');
+    if (!spotifyUrlInfo) {
+      throw new Error('spotify-url-info is not installed or failed to load.');
+    }
+
+    const playlistData = await spotifyUrlInfo.getData(url);
+    const rawTracks = await spotifyUrlInfo.getTracks(url);
+
+    const playlistImage = playlistData.coverArt?.sources?.[0]?.url || '';
+
+    const items = rawTracks.map(t => {
+      // Extract track ID from URI (e.g. "spotify:track:ID")
+      const trackId = t.uri ? t.uri.split(':').pop() : '';
+      const trackUrl = trackId ? `https://open.spotify.com/track/${trackId}` : '';
+      
+      return {
+        track: {
+          name: t.name || 'Unknown',
+          artists: [{ name: t.artist || 'Unknown Artist' }],
+          album: { name: 'Unknown Album' },
+          external_urls: { spotify: trackUrl },
+          external_ids: { isrc: '—' },
+          albumArt: playlistImage // Use playlist image as fallback cover art
+        }
+      };
+    });
+
+    return res.status(200).json({
+      source: 'spotify_url_info',
+      name: playlistData.name || playlistData.title || 'Playlist',
+      owner: {
+        display_name: playlistData.subtitle || 'Unknown'
+      },
+      images: [{ url: playlistImage }],
+      tracks: {
+        total: items.length,
+        items: items
+      }
+    });
   } catch (err) {
     console.error('Error fetching playlist data:', err);
     return res.status(500).json({ error: err.message || 'Server error fetching playlist.' });
