@@ -1392,7 +1392,7 @@ async function startGoogleAiLanguageDetection() {
     } catch (err) {
       console.warn(`[AI Mode] Failed for "${track.name}":`, err.message);
       
-      const fallback = detectLanguage(track.name, track.isrc);
+      const fallback = 'Unknown';
       track.language = fallback;
 
       if (badge) {

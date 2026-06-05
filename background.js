@@ -31,20 +31,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Known Languages List for matching
-const KNOWN_LANGUAGES = [
-  "Arabic", "Assamese", "Bengali", "Bikol", "Brazilian Portuguese",
-  "Bulgarian", "Cebuano", "Chinese", "Croatian", "Czech", "Danish",
-  "Dutch", "English", "Finnish", "French", "German", "Greek",
-  "Haitian Creole", "Haryanvi", "Hausa", "Hebrew", "Hindi", "Hungarian",
-  "Igbo", "Indonesian", "Italian", "Japanese", "Javanese", "Korean",
-  "Lingála", "Malay", "Malayalam", "Marathi", "Nepali", "Norwegian",
-  "Odia", "Persian", "Punjabi", "Polish", "Portuguese", "Romanian",
-  "Russian", "Sanskrit", "Shona", "Slovak", "Spanish", "Sundanese",
-  "Swedish", "Tagalog", "Tamil", "Telugu", "Thai", "Tsonga", "Turkish",
-  "Ukrainian", "Urdu", "Venda", "Vietnamese", "Yoruba", "Xhosa", "Zulu"
-];
-
 async function handleGoogleAiLang(song, artists) {
   const cleanQuery = `${song} ${artists}`.trim();
   const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`What language is the song "${cleanQuery}"?`)}&udm=50`;
@@ -132,7 +118,7 @@ async function handleGoogleAiLang(song, artists) {
     try {
       const results = await chrome.scripting.executeScript({
         target: { tabId: silentTabId },
-        func: (langs, baseLen) => {
+        func: (baseLen) => {
           const fullText = document.body?.innerText || '';
           if (fullText.includes('detected unusual traffic') || fullText.includes('not a robot')) {
             return { lang: null, captcha: true };
@@ -144,22 +130,49 @@ async function handleGoogleAiLang(song, artists) {
             : fullText.substring(Math.max(0, fullText.length - 2000));
 
           const lines = textToScan.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+          const badExactLines = new Set([
+            'ai overview',
+            'search results',
+            'show more',
+            'sources',
+            'google',
+            'ask anything',
+            'people also ask'
+          ]);
+
+          const cleanLanguage = (value) => {
+            if (!value) return '';
+            let cleaned = value
+              .replace(/\*\*/g, '')
+              .replace(/^["'`]+|["'`.!,;:]+$/g, '')
+              .replace(/^\s*(language|answer)\s*:\s*/i, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            cleaned = cleaned.replace(/\s*\([^)]*\)\s*$/g, '').trim();
+            if (!cleaned || cleaned.length > 48) return '';
+            if (badExactLines.has(cleaned.toLowerCase())) return '';
+            if (/what language|reply with|song|lyrics|artist|track/i.test(cleaned)) return '';
+            if (!/^[\p{L}\p{M}][\p{L}\p{M}\s.'’/-]*$/u.test(cleaned)) return '';
+            return cleaned;
+          };
+
           for (const line of lines) {
-            for (const lang of langs) {
-              const lowerLine = line.toLowerCase();
-              const lowerLang = lang.toLowerCase();
-              if (lowerLine === lowerLang ||
-                  lowerLine.startsWith(lowerLang + ' ') ||
-                  lowerLine.startsWith(lowerLang + '.') ||
-                  lowerLine.startsWith('**' + lowerLang + '**') ||
-                  lowerLine === `language: ${lowerLang}`) {
-                return { lang, captcha: false };
-              }
+            const direct = cleanLanguage(line);
+            if (direct && direct.split(/\s+/).length <= 4) {
+              return { lang: direct, captcha: false };
+            }
+
+            const sentenceMatch = line.match(/\b(?:language|lang)\b[^A-Za-z]{0,8}(?:is|:)\s*([A-Za-z][A-Za-z\s.'’/-]{1,48})/i)
+              || line.match(/\bis\s+([A-Za-z][A-Za-z\s.'’/-]{1,48})(?:\s+language)?[.!]?$/i);
+            const fromSentence = cleanLanguage(sentenceMatch?.[1]);
+            if (fromSentence && fromSentence.split(/\s+/).length <= 4) {
+              return { lang: fromSentence, captcha: false };
             }
           }
           return { lang: null, captcha: false };
         },
-        args: [KNOWN_LANGUAGES, baseTextLength]
+        args: [baseTextLength]
       });
 
       const res = results?.[0]?.result;
