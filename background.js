@@ -219,7 +219,175 @@ async function submitGoogleFollowUp(tabId, query) {
     args: [query]
   }).catch(error => [{ result: { ok: false, error: error?.message || String(error) } }]);
 
-  return injected?.[0]?.result || messageResult;
+  const injectedResult = injected?.[0]?.result || messageResult;
+  if (injectedResult?.ok) {
+    return injectedResult;
+  }
+
+  return submitGoogleFollowUpWithDebugger(tabId, query, injectedResult);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult) {
+  const target = { tabId };
+  let attached = false;
+
+  const focusResult = await chrome.scripting.executeScript({
+    target,
+    func: () => {
+      const isVisible = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return rect.width > 0
+          && rect.height > 0
+          && style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && style.opacity !== '0';
+      };
+      const selectors = [
+        'textarea[placeholder*="ask" i]',
+        'textarea[placeholder*="follow" i]',
+        'textarea[placeholder*="message" i]',
+        'textarea',
+        '[contenteditable="true"]',
+        '[role="textbox"]'
+      ];
+      let box = null;
+      for (const selector of selectors) {
+        const matches = Array.from(document.querySelectorAll(selector))
+          .filter(isVisible)
+          .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+        if (matches[0]) {
+          box = matches[0];
+          break;
+        }
+      }
+      if (!box) return { ok: false, error: 'Google follow-up box not found for debugger input' };
+
+      box.click();
+      box.focus();
+      if (box instanceof HTMLTextAreaElement || box instanceof HTMLInputElement) {
+        const proto = box instanceof HTMLTextAreaElement
+          ? window.HTMLTextAreaElement.prototype
+          : window.HTMLInputElement.prototype;
+        const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+        if (nativeSetter) nativeSetter.call(box, '');
+        else box.value = '';
+      } else {
+        box.textContent = '';
+      }
+      box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+
+      return {
+        ok: true,
+        inputTag: box.tagName,
+        placeholder: box.getAttribute('placeholder') || '',
+        rect: box.getBoundingClientRect().toJSON?.() || null
+      };
+    }
+  }).catch(error => [{ result: { ok: false, error: error?.message || String(error) } }]);
+
+  if (!focusResult?.[0]?.result?.ok) {
+    return {
+      ok: false,
+      error: focusResult?.[0]?.result?.error || previousResult?.error || 'Could not focus Google follow-up box'
+    };
+  }
+
+  try {
+    await chrome.debugger.attach(target, '1.3');
+    attached = true;
+    await chrome.debugger.sendCommand(target, 'Input.insertText', { text: query });
+    await sleep(800);
+    await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'Enter',
+      code: 'Enter',
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13
+    });
+    await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key: 'Enter',
+      code: 'Enter',
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13
+    });
+    await sleep(700);
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Debugger input failed: ${error?.message || error}`
+    };
+  } finally {
+    if (attached) {
+      await chrome.debugger.detach(target).catch(() => {});
+    }
+  }
+
+  const submittedResult = await chrome.scripting.executeScript({
+    target,
+    func: async (expectedPrompt) => {
+      const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+      const isVisible = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return rect.width > 0
+          && rect.height > 0
+          && style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && style.opacity !== '0';
+      };
+      const clickSend = () => {
+        const selectors = [
+          'button[aria-label*="send" i]',
+          'button[aria-label*="ask" i]',
+          '[role="button"][aria-label*="send" i]',
+          '[role="button"][aria-label*="ask" i]',
+          'button'
+        ];
+        const buttons = selectors
+          .flatMap(selector => Array.from(document.querySelectorAll(selector)))
+          .filter(isVisible)
+          .filter(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true')
+          .filter(button => !/voice|microphone|mic/i.test(button.getAttribute('aria-label') || ''))
+          .sort((a, b) => {
+            const ar = a.getBoundingClientRect();
+            const br = b.getBoundingClientRect();
+            return (br.bottom - ar.bottom) || (br.right - ar.right);
+          });
+        if (buttons[0]) {
+          buttons[0].click();
+          return true;
+        }
+        return false;
+      };
+
+      clickSend();
+      const needle = expectedPrompt.replace(/\s+/g, ' ').trim();
+      const start = Date.now();
+      while (Date.now() - start < 4500) {
+        const pageText = (document.body?.innerText || '').replace(/\s+/g, ' ');
+        if (pageText.includes(needle)) {
+          return { ok: true, source: 'debugger-input' };
+        }
+        await wait(250);
+      }
+
+      return { ok: false, error: 'Debugger typed text, but Google did not submit the follow-up' };
+    },
+    args: [query]
+  }).catch(error => [{ result: { ok: false, error: error?.message || String(error) } }]);
+
+  return submittedResult?.[0]?.result || {
+    ok: false,
+    error: previousResult?.error || 'Debugger follow-up failed'
+  };
 }
 
 async function handleGoogleAiLang(song, artists) {

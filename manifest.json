@@ -2,10 +2,11 @@
   "manifest_version": 3,
   "name": "Playlist Info Exporter",
   "description": "Export Spotify playlists with ISRC, language detection, and Google AI Mode support.",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "permissions": [
     "activeTab",
     "alarms",
+    "debugger",
     "scripting",
     "tabs"
   ],
