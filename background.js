@@ -124,20 +124,31 @@ async function handleGoogleAiLang(song, artists) {
             return { lang: null, captcha: true };
           }
 
-          // Scan only the newly added text or the last chunk
-          const textToScan = baseLen > 0
-            ? fullText.substring(baseLen)
-            : fullText.substring(Math.max(0, fullText.length - 2000));
+          // Scan the newest visible text. Google can re-render answers above/below the input,
+          // so keep a fallback chunk even when we know the previous page length.
+          const newText = baseLen > 0 ? fullText.substring(baseLen) : '';
+          const recentText = fullText.substring(Math.max(0, fullText.length - 6000));
+          const textToScan = [newText, recentText].filter(Boolean).join('\n');
 
           const lines = textToScan.split('\n').map(l => l.trim()).filter(l => l.length > 0);
           const badExactLines = new Set([
+            'ai mode',
             'ai overview',
+            'all',
+            'images',
+            'videos',
+            'news',
+            'more',
             'search results',
             'show more',
             'sources',
             'google',
             'ask anything',
-            'people also ask'
+            'people also ask',
+            'copy',
+            'share',
+            'like',
+            'dislike'
           ]);
 
           const cleanLanguage = (value) => {
@@ -146,6 +157,7 @@ async function handleGoogleAiLang(song, artists) {
               .replace(/\*\*/g, '')
               .replace(/^["'`]+|["'`.!,;:]+$/g, '')
               .replace(/^\s*(language|answer)\s*:\s*/i, '')
+              .replace(/^\s*(it is|it's|in)\s+/i, '')
               .replace(/\s+/g, ' ')
               .trim();
 
@@ -157,19 +169,25 @@ async function handleGoogleAiLang(song, artists) {
             return cleaned;
           };
 
-          for (const line of lines) {
+          const candidates = [];
+          for (const line of lines.slice().reverse()) {
             const direct = cleanLanguage(line);
             if (direct && direct.split(/\s+/).length <= 4) {
-              return { lang: direct, captcha: false };
+              candidates.push(direct);
             }
 
             const sentenceMatch = line.match(/\b(?:language|lang)\b[^A-Za-z]{0,8}(?:is|:)\s*([A-Za-z][A-Za-z\s.'’/-]{1,48})/i)
-              || line.match(/\bis\s+([A-Za-z][A-Za-z\s.'’/-]{1,48})(?:\s+language)?[.!]?$/i);
+              || line.match(/\bis\s+(?:in\s+)?([A-Za-z][A-Za-z\s.'’/-]{1,48})(?:\s+language)?[.!]?$/i);
             const fromSentence = cleanLanguage(sentenceMatch?.[1]);
             if (fromSentence && fromSentence.split(/\s+/).length <= 4) {
-              return { lang: fromSentence, captcha: false };
+              candidates.push(fromSentence);
             }
           }
+
+          if (candidates.length) {
+            return { lang: candidates[0], captcha: false };
+          }
+
           return { lang: null, captcha: false };
         },
         args: [baseTextLength]
