@@ -124,12 +124,12 @@ async function playlistExporterSubmitFollowUp(query) {
 
   window.__playlistExporterLastPrompt = query;
   playlistExporterSetBoxText(box, query);
-  await playlistExporterSleep(800);
+  await playlistExporterSleep(550);
 
   const button = playlistExporterFindSubmitButton(box);
   if (button) {
     button.click();
-    await playlistExporterSleep(500);
+    await playlistExporterSleep(250);
   }
 
   box.dispatchEvent(new KeyboardEvent('keydown', {

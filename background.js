@@ -212,12 +212,12 @@ async function submitGoogleFollowUp(tabId, query, requestId) {
 
       window.__playlistExporterLastPrompt = followUpText;
       setBoxText(box, followUpText);
-      await sleep(800);
+      await sleep(550);
 
       const button = findButton(box);
       if (button) {
         button.click();
-        await sleep(500);
+        await sleep(250);
       }
 
       box.dispatchEvent(new KeyboardEvent('keydown', {
@@ -359,7 +359,7 @@ async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult, re
     attached = true;
     addAiDebug('bg', 'Debugger attached; inserting text', { requestId, textLength: query.length });
     await chrome.debugger.sendCommand(target, 'Input.insertText', { text: query });
-    await sleep(800);
+    await sleep(450);
     await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
       type: 'keyDown',
       key: 'Enter',
@@ -374,7 +374,7 @@ async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult, re
       windowsVirtualKeyCode: 13,
       nativeVirtualKeyCode: 13
     });
-    await sleep(700);
+    await sleep(450);
   } catch (error) {
     addAiDebug('bg', 'Debugger input failed', { requestId, error: error?.message || String(error) });
     return {
@@ -502,16 +502,16 @@ async function handleGoogleAiLang(song, artists, requestId) {
     silentTabId = win.tabs[0].id;
     addAiDebug('bg', 'New Google AI tab opened', { requestId, silentTabId, windowId: win.id });
     // Wait for initial load
-    await new Promise(r => setTimeout(r, 7000));
+    await new Promise(r => setTimeout(r, 5500));
   } else {
     // Wait for response to render
     addAiDebug('bg', 'Waiting for follow-up response render', { requestId });
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise(r => setTimeout(r, 1800));
   }
 
   // 3. Poll for the AI language result
   const MAX_WAIT_MS = 45000;
-  const POLL_INTERVAL_MS = 1000;
+  const POLL_INTERVAL_MS = 700;
   const startTime = Date.now();
   let foundLang = null;
   let captcha = false;

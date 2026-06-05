@@ -1482,8 +1482,8 @@ async function startGoogleAiLanguageDetection() {
           }
 
           if (attempt < 3) {
-            addAiDebugLog('page', 'Waiting before retry', { requestId, row: i + 1, ms: 3000 });
-            await sleep(3000);
+            addAiDebugLog('page', 'Waiting before retry', { requestId, row: i + 1, ms: 1500 });
+            await sleep(1500);
           }
         }
       }
@@ -1498,14 +1498,14 @@ async function startGoogleAiLanguageDetection() {
           badge.textContent = response;
         }
 
-        addAiDebugLog('page', 'Waiting before next track', { row: i + 1, ms: 2500 });
-        await sleep(2500);
+        addAiDebugLog('page', 'Waiting before next track', { row: i + 1, ms: 900 });
+        await sleep(900);
       } else if (badge) {
         badge.classList.remove('scanning-text');
         badge.textContent = 'Skipped';
         showToast(`Skipped language: ${track.name}`);
         addAiDebugLog('page', 'Track skipped after retries', { row: i + 1, song: track.name });
-        await sleep(1500);
+        await sleep(900);
       }
     }
   } catch (err) {
