@@ -33,10 +33,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleGoogleAiLang(song, artists) {
   const cleanQuery = `${song} ${artists}`.trim();
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`What language is the song "${cleanQuery}"?`)}&udm=50`;
-  
   // Strict prompt so Google SGE/AI answers with a single word or short line
   const followUpQuery = `What language is the song "${cleanQuery}"? Reply with ONLY the language name in a single word. Do not add any other text.`;
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(followUpQuery)}&udm=50`;
 
   let usingExistingTab = false;
   let baseTextLength = 0;
@@ -58,6 +57,7 @@ async function handleGoogleAiLang(song, artists) {
       await chrome.scripting.executeScript({
         target: { tabId: silentTabId },
         func: (query) => {
+          window.__playlistExporterLastPrompt = query;
           const textareas = document.querySelectorAll('textarea');
           let box = null;
           for (const ta of textareas) {
@@ -118,17 +118,28 @@ async function handleGoogleAiLang(song, artists) {
     try {
       const results = await chrome.scripting.executeScript({
         target: { tabId: silentTabId },
-        func: (baseLen) => {
+        func: (baseLen, query) => {
           const fullText = document.body?.innerText || '';
           if (fullText.includes('detected unusual traffic') || fullText.includes('not a robot')) {
             return { lang: null, captcha: true };
+          }
+
+          const queryNeedle = query.replace(/\s+/g, ' ').trim();
+          const normalizedFullText = fullText.replace(/\s+/g, ' ');
+          const queryIndex = normalizedFullText.lastIndexOf(queryNeedle);
+          const afterPromptText = queryIndex >= 0
+            ? normalizedFullText.substring(queryIndex + queryNeedle.length)
+            : '';
+
+          if (!afterPromptText && baseLen > 0) {
+            return { lang: null, captcha: false };
           }
 
           // Scan the newest visible text. Google can re-render answers above/below the input,
           // so keep a fallback chunk even when we know the previous page length.
           const newText = baseLen > 0 ? fullText.substring(baseLen) : '';
           const recentText = fullText.substring(Math.max(0, fullText.length - 6000));
-          const textToScan = [newText, recentText].filter(Boolean).join('\n');
+          const textToScan = [afterPromptText, newText, recentText].filter(Boolean).join('\n');
 
           const lines = textToScan.split('\n').map(l => l.trim()).filter(l => l.length > 0);
           const badExactLines = new Set([
@@ -185,8 +196,8 @@ async function handleGoogleAiLang(song, artists) {
 
           const candidates = [];
           const phraseCandidates = [
+            afterPromptText,
             textToScan,
-            recentText,
             ...lines
           ];
 
@@ -233,7 +244,7 @@ async function handleGoogleAiLang(song, artists) {
 
           return { lang: null, captcha: false };
         },
-        args: [baseTextLength]
+        args: [baseTextLength, followUpQuery]
       });
 
       const res = results?.[0]?.result;
