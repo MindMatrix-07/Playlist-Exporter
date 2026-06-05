@@ -545,18 +545,14 @@ async function handleGoogleAiLang(song, artists, requestId) {
 
           const lines = textToScan.split('\n').map(l => l.trim()).filter(l => l.length > 0);
           const knownLanguages = new Set([
-            'afrikaans','akan','albanian','amharic','arabic','armenian','assamese','awadhi','azerbaijani',
-            'balochi','basque','belarusian','bengali','bhojpuri','bosnian','bulgarian','burmese',
-            'cantonese','catalan','cebuano','chinese','croatian','czech','danish','dogri','dutch',
-            'english','estonian','finnish','french','georgian','german','greek','gujarati','hausa',
-            'hebrew','hindi','hungarian','igbo','indonesian','irish','italian','japanese','javanese',
-            'kannada','kashmiri','kazakh','khmer','konkani','korean','kurdish','lao','latin','latvian',
-            'lithuanian','macedonian','maithili','malay','malayalam','mandarin','manipuri','marathi',
-            'mongolian','nepali','norwegian','odia','oriya','pashto','persian','polish','portuguese',
-            'punjabi','rajasthani','romanian','russian','sanskrit','santali','serbian','sindhi',
-            'sinhala','slovak','slovenian','somali','spanish','sundanese','swahili','swedish',
-            'tagalog','tamil','telugu','thai','tibetan','tulu','turkish','ukrainian','urdu','uzbek',
-            'vietnamese','welsh','yoruba','zulu'
+            'arabic','assamese','bengali','bikol','brazilian portuguese','bulgarian','cebuano',
+            'chinese','croatian','czech','danish','dutch','english','finnish','french','german',
+            'greek','haitian creole','haryanvi','hausa','hebrew','hindi','hungarian','igbo',
+            'indonesian','italian','japanese','javanese','korean','lingála','lingala','malay',
+            'malayalam','marathi','nepali','norwegian','odia','persian','punjabi','polish',
+            'portuguese','romanian','russian','sanskrit','shona','slovak','spanish','sundanese',
+            'swedish','tagalog','tamil','telugu','thai','tsonga','turkish','ukranian','ukrainian',
+            'urdu','venda','vietnamese','yoruba','xhosa','zulu'
           ]);
           const badExactLines = new Set([
             'ai mode',
