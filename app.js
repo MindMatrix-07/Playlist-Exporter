@@ -1413,7 +1413,10 @@ async function startGoogleAiLanguageDetection() {
 
       await sleep(2500);
     } else if (badge) {
-      badge.textContent = 'Scanning…';
+      badge.textContent = 'Waiting…';
+      showToast(`Waiting for Gemini answer: ${track.name}`);
+      aiDetectionInProgress = false;
+      break;
     }
   }
 

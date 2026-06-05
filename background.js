@@ -158,6 +158,8 @@ async function handleGoogleAiLang(song, artists) {
               .replace(/^["'`]+|["'`.!,;:]+$/g, '')
               .replace(/^\s*(language|answer)\s*:\s*/i, '')
               .replace(/^\s*(it is|it's|in)\s+/i, '')
+              .replace(/^\s*(the|a|an)\s+/i, '')
+              .replace(/\s+language\s*$/i, '')
               .replace(/\s+/g, ' ')
               .trim();
 
@@ -169,7 +171,27 @@ async function handleGoogleAiLang(song, artists) {
             return cleaned;
           };
 
+          const pickLanguage = (text) => {
+            const phraseMatch = text.match(/\b(?:language|lang)\b[^A-Za-z]{0,8}(?:is|:)\s*(?:in\s+)?(?:the\s+)?([A-Za-z][A-Za-z\s.'’/-]{1,48})/i)
+              || text.match(/\b(?:is|are)\s+(?:primarily\s+|mainly\s+)?(?:in\s+)?(?:the\s+)?([A-Za-z][A-Za-z\s.'’/-]{1,48}?)(?:\s+language)?(?:[.!?,]|$)/i);
+            const fromPhrase = cleanLanguage(phraseMatch?.[1]);
+            if (fromPhrase && fromPhrase.split(/\s+/).length <= 4) return fromPhrase;
+
+            const direct = cleanLanguage(text);
+            if (direct && direct.split(/\s+/).length <= 4) return direct;
+            return '';
+          };
+
           const candidates = [];
+          const highlightedTexts = Array.from(document.querySelectorAll('mark strong, mark b, mark, strong.Yjhzub, b.Yjhzub'))
+            .map(el => el.innerText?.trim())
+            .filter(text => text && text.length <= 80);
+
+          for (const text of highlightedTexts.slice().reverse()) {
+            const picked = pickLanguage(text);
+            if (picked) candidates.push(picked);
+          }
+
           const visibleTexts = Array.from(document.querySelectorAll('div, span, p, h1, h2, h3'))
             .filter(el => {
               const rect = el.getBoundingClientRect();
@@ -180,24 +202,13 @@ async function handleGoogleAiLang(song, artists) {
             .filter(text => text && text.length <= 80);
 
           for (const text of visibleTexts.slice().reverse()) {
-            const direct = cleanLanguage(text);
-            if (direct && direct.split(/\s+/).length <= 4) {
-              candidates.push(direct);
-            }
+            const picked = pickLanguage(text);
+            if (picked) candidates.push(picked);
           }
 
           for (const line of lines.slice().reverse()) {
-            const direct = cleanLanguage(line);
-            if (direct && direct.split(/\s+/).length <= 4) {
-              candidates.push(direct);
-            }
-
-            const sentenceMatch = line.match(/\b(?:language|lang)\b[^A-Za-z]{0,8}(?:is|:)\s*([A-Za-z][A-Za-z\s.'’/-]{1,48})/i)
-              || line.match(/\bis\s+(?:in\s+)?([A-Za-z][A-Za-z\s.'’/-]{1,48})(?:\s+language)?[.!]?$/i);
-            const fromSentence = cleanLanguage(sentenceMatch?.[1]);
-            if (fromSentence && fromSentence.split(/\s+/).length <= 4) {
-              candidates.push(fromSentence);
-            }
+            const picked = pickLanguage(line);
+            if (picked) candidates.push(picked);
           }
 
           if (candidates.length) {
