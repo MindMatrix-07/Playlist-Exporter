@@ -31,6 +31,144 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+async function submitGoogleFollowUp(tabId, query) {
+  const messageResult = await chrome.tabs.sendMessage(tabId, {
+    type: 'TYPE_GOOGLE_AI_FOLLOW_UP',
+    query
+  }).catch(error => ({ ok: false, error: error?.message || String(error) }));
+
+  if (messageResult?.ok) {
+    return messageResult;
+  }
+
+  const injected = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: async (followUpText) => {
+      const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+      const isVisible = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return rect.width > 0
+          && rect.height > 0
+          && style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && style.opacity !== '0';
+      };
+      const findBox = () => {
+        const selectors = [
+          'textarea[placeholder*="ask" i]',
+          'textarea[placeholder*="follow" i]',
+          'textarea[placeholder*="message" i]',
+          'textarea',
+          '[contenteditable="true"]',
+          '[role="textbox"]'
+        ];
+
+        for (const selector of selectors) {
+          const matches = Array.from(document.querySelectorAll(selector))
+            .filter(isVisible)
+            .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+          if (matches[0]) return matches[0];
+        }
+        return null;
+      };
+      const setBoxText = (box, text) => {
+        box.focus();
+        if (box instanceof HTMLTextAreaElement || box instanceof HTMLInputElement) {
+          const proto = box instanceof HTMLTextAreaElement
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
+          const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+          if (nativeSetter) {
+            nativeSetter.call(box, text);
+          } else {
+            box.value = text;
+          }
+        } else {
+          box.textContent = text;
+        }
+
+        box.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertText',
+          data: text
+        }));
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const findButton = (box) => {
+        const roots = [
+          box.closest('form'),
+          box.closest('[role="search"]'),
+          box.parentElement,
+          document
+        ].filter(Boolean);
+        const selectors = [
+          'button[type="submit"]',
+          'button[aria-label*="send" i]',
+          'button[aria-label*="submit" i]',
+          'button[aria-label*="search" i]',
+          'button'
+        ];
+
+        for (const root of roots) {
+          const buttons = selectors
+            .flatMap(selector => Array.from(root.querySelectorAll(selector)))
+            .filter(isVisible)
+            .filter(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true')
+            .sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right);
+          if (buttons[0]) return buttons[0];
+        }
+        return null;
+      };
+
+      const box = findBox();
+      if (!box) {
+        return { ok: false, error: 'Google follow-up box not found' };
+      }
+
+      window.__playlistExporterLastPrompt = followUpText;
+      setBoxText(box, followUpText);
+      await sleep(350);
+
+      const button = findButton(box);
+      if (button) {
+        button.click();
+        await sleep(250);
+      }
+
+      box.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+      }));
+      box.dispatchEvent(new KeyboardEvent('keyup', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+      }));
+
+      return {
+        ok: true,
+        source: 'injected-fallback',
+        clickedButton: Boolean(button),
+        inputTag: box.tagName,
+        placeholder: box.getAttribute('placeholder') || ''
+      };
+    },
+    args: [query]
+  }).catch(error => [{ result: { ok: false, error: error?.message || String(error) } }]);
+
+  return injected?.[0]?.result || messageResult;
+}
+
 async function handleGoogleAiLang(song, artists) {
   const cleanQuery = `${song} ${artists}`.trim();
   // Strict prompt so Google SGE/AI answers with a single word or short line
@@ -53,39 +191,12 @@ async function handleGoogleAiLang(song, artists) {
       });
       baseTextLength = snapResults?.[0]?.result || 0;
 
-      // Inject script to type and submit the follow-up
-      await chrome.scripting.executeScript({
-        target: { tabId: silentTabId },
-        func: (query) => {
-          window.__playlistExporterLastPrompt = query;
-          const textareas = document.querySelectorAll('textarea');
-          let box = null;
-          for (const ta of textareas) {
-            const ph = ta.placeholder?.toLowerCase() || '';
-            if (ph.includes('follow up') || ph.includes('ask anything') || ph.includes('message')) {
-              box = ta; break;
-            }
-          }
-          if (!box) {
-            box = Array.from(textareas).find(t => t.offsetParent !== null);
-          }
-          if (box) {
-            box.focus();
-            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-            nativeSetter.call(box, query);
-            box.dispatchEvent(new Event('input', { bubbles: true }));
-            setTimeout(() => {
-              box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-              const btn = box.closest('form')?.querySelector('button[type="submit"], button[aria-label*="send" i]');
-              if (btn) btn.click();
-            }, 300);
-          } else {
-            // Fallback: reload tab with new query
-            window.location.href = `https://www.google.com/search?q=${encodeURIComponent(query)}&udm=50`;
-          }
-        },
-        args: [followUpQuery]
-      });
+      const followUpResult = await submitGoogleFollowUp(silentTabId, followUpQuery);
+      if (!followUpResult?.ok) {
+        console.warn('[PlaylistExporter BG] Follow-up submit failed:', followUpResult);
+        await chrome.tabs.update(silentTabId, { url: searchUrl });
+        baseTextLength = 0;
+      }
     } catch (e) {
       silentTabId = null;
       usingExistingTab = false;
