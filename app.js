@@ -1380,8 +1380,30 @@ async function startGoogleAiLanguageDetection() {
       badge.classList.add('scanning-text');
     }
 
-    try {
-      const response = await askGoogleAiLang(track.name, track.artists);
+    let response = '';
+    for (let attempt = 1; attempt <= 3 && aiDetectionInProgress; attempt++) {
+      try {
+        if (badge) badge.textContent = attempt === 1 ? 'Scanning…' : `Retrying ${attempt}/3…`;
+        response = await askGoogleAiLang(track.name, track.artists);
+        break;
+      } catch (err) {
+        console.warn(`[AI Mode] Failed for "${track.name}" attempt ${attempt}:`, err.message);
+
+        if (err.message && err.message.includes('CAPTCHA')) {
+          showToast('⚠️ Google CAPTCHA appeared. Please solve it.');
+          aiDetectionInProgress = false;
+          break;
+        }
+
+        if (attempt < 3) {
+          await sleep(3000);
+        }
+      }
+    }
+
+    if (!aiDetectionInProgress) break;
+
+    if (response) {
       track.language = response;
 
       if (badge) {
@@ -1389,23 +1411,9 @@ async function startGoogleAiLanguageDetection() {
         badge.textContent = response;
       }
 
-      await sleep(1500);
-    } catch (err) {
-      console.warn(`[AI Mode] Failed for "${track.name}":`, err.message);
-      
-      const fallback = 'Unknown';
-      track.language = fallback;
-
-      if (badge) {
-        badge.classList.remove('scanning-text');
-        badge.textContent = fallback;
-      }
-
-      if (err.message && err.message.includes('CAPTCHA')) {
-        showToast('⚠️ Google CAPTCHA appeared. Please solve it.');
-        aiDetectionInProgress = false;
-        break;
-      }
+      await sleep(2500);
+    } else if (badge) {
+      badge.textContent = 'Scanning…';
     }
   }
 

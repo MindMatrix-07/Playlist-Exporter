@@ -170,6 +170,22 @@ async function handleGoogleAiLang(song, artists) {
           };
 
           const candidates = [];
+          const visibleTexts = Array.from(document.querySelectorAll('div, span, p, h1, h2, h3'))
+            .filter(el => {
+              const rect = el.getBoundingClientRect();
+              const style = window.getComputedStyle(el);
+              return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            })
+            .map(el => el.innerText?.trim())
+            .filter(text => text && text.length <= 80);
+
+          for (const text of visibleTexts.slice().reverse()) {
+            const direct = cleanLanguage(text);
+            if (direct && direct.split(/\s+/).length <= 4) {
+              candidates.push(direct);
+            }
+          }
+
           for (const line of lines.slice().reverse()) {
             const direct = cleanLanguage(line);
             if (direct && direct.split(/\s+/).length <= 4) {
