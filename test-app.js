@@ -1414,10 +1414,10 @@ async function startGoogleAiLanguageDetection() {
 
       await sleep(2500);
     } else if (badge) {
-      badge.textContent = 'Waiting…';
-      showToast(`Waiting for Gemini answer: ${track.name}`);
-      aiDetectionInProgress = false;
-      break;
+      badge.classList.remove('scanning-text');
+      badge.textContent = 'Skipped';
+      showToast(`Skipped language: ${track.name}`);
+      await sleep(1500);
     }
   }
 
