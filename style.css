@@ -1096,6 +1096,80 @@ body {
   flex-grow: 1;
 }
 
+.ai-debug-panel {
+  margin: 0 0 24px;
+  border: 1px solid rgba(124, 58, 237, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(10, 10, 18, 0.62);
+  overflow: hidden;
+}
+
+.ai-debug-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-debug-head strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.ai-debug-head span {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.ai-debug-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ai-debug-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.ai-debug-actions button:hover {
+  color: var(--text-primary);
+  border-color: rgba(124, 58, 237, 0.45);
+}
+
+.ai-debug-body {
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 14px 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: #d8d5ff;
+  white-space: pre-wrap;
+}
+
+.ai-debug-entry {
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ai-debug-entry:last-child {
+  border-bottom: 0;
+}
+
 .scanning-text {
   color: var(--accent);
   font-weight: 600;

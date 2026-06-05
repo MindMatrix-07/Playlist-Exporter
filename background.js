@@ -9,39 +9,89 @@ chrome.action.onClicked.addListener(() => {
 
 // State
 let silentTabId = null;
+const aiDebugEntries = [];
+
+function addAiDebug(scope, message, data = {}) {
+  const entry = {
+    time: new Date().toLocaleTimeString(),
+    scope,
+    message,
+    data
+  };
+  aiDebugEntries.push(entry);
+  if (aiDebugEntries.length > 200) aiDebugEntries.shift();
+  console.log(`[PlaylistExporter ${scope}] ${message}`, data);
+  return entry;
+}
+
+function getAiDebugTail(limit = 120) {
+  return aiDebugEntries.slice(-limit);
+}
 
 // Reset tab reference if closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (tabId === silentTabId) {
     silentTabId = null;
-    console.log('[PlaylistExporter BG] Silent tab closed.');
+    addAiDebug('bg', 'Silent tab closed', { tabId });
   }
 });
 
 // Listener for AI Mode queries
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'ASK_GOOGLE_AI_LANG') {
-    handleGoogleAiLang(message.song, message.artists)
-      .then(lang => sendResponse({ ok: true, language: lang }))
+    addAiDebug('bg', 'ASK_GOOGLE_AI_LANG received', {
+      requestId: message.requestId,
+      song: message.song,
+      artists: message.artists,
+      senderTabId: sender.tab?.id
+    });
+    handleGoogleAiLang(message.song, message.artists, message.requestId)
+      .then(lang => sendResponse({
+        ok: true,
+        language: lang,
+        debug: { requestId: message.requestId, entries: getAiDebugTail(12) }
+      }))
       .catch(err => {
-        console.error('[PlaylistExporter BG] AI search error:', err);
-        sendResponse({ ok: false, error: err.message });
+        addAiDebug('bg', 'AI search error', {
+          requestId: message.requestId,
+          error: err.message
+        });
+        sendResponse({
+          ok: false,
+          error: err.message,
+          debug: { requestId: message.requestId, entries: getAiDebugTail(18) }
+        });
       });
     return true; // Keep channel open for async response
   }
+
+  if (message?.type === 'GET_AI_DEBUG_LOG') {
+    sendResponse({ ok: true, entries: getAiDebugTail(160) });
+    return true;
+  }
+
+  if (message?.type === 'CLEAR_AI_DEBUG_LOG') {
+    aiDebugEntries.length = 0;
+    addAiDebug('bg', 'Background debug log cleared');
+    sendResponse({ ok: true });
+    return true;
+  }
 });
 
-async function submitGoogleFollowUp(tabId, query) {
+async function submitGoogleFollowUp(tabId, query, requestId) {
+  addAiDebug('bg', 'Submitting Google follow-up', { requestId, tabId });
   let messageResult = await chrome.tabs.sendMessage(tabId, {
     type: 'TYPE_GOOGLE_AI_FOLLOW_UP',
     query
   }).catch(error => ({ ok: false, error: error?.message || String(error) }));
 
+  addAiDebug('bg', 'Content-script follow-up result', { requestId, result: messageResult });
   if (messageResult?.ok) {
     return messageResult;
   }
 
   if (/receiving end|could not establish connection/i.test(messageResult?.error || '')) {
+    addAiDebug('bg', 'Injecting google-followup.js into existing Google tab', { requestId, tabId });
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['google-followup.js']
@@ -52,11 +102,13 @@ async function submitGoogleFollowUp(tabId, query) {
       query
     }).catch(error => ({ ok: false, error: error?.message || String(error) }));
 
+    addAiDebug('bg', 'Post-injection follow-up result', { requestId, result: messageResult });
     if (messageResult?.ok) {
       return messageResult;
     }
   }
 
+  addAiDebug('bg', 'Trying injected fallback follow-up', { requestId, tabId });
   const injected = await chrome.scripting.executeScript({
     target: { tabId },
     func: async (followUpText) => {
@@ -220,21 +272,23 @@ async function submitGoogleFollowUp(tabId, query) {
   }).catch(error => [{ result: { ok: false, error: error?.message || String(error) } }]);
 
   const injectedResult = injected?.[0]?.result || messageResult;
+  addAiDebug('bg', 'Injected fallback result', { requestId, result: injectedResult });
   if (injectedResult?.ok) {
     return injectedResult;
   }
 
-  return submitGoogleFollowUpWithDebugger(tabId, query, injectedResult);
+  return submitGoogleFollowUpWithDebugger(tabId, query, injectedResult, requestId);
 }
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult) {
+async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult, requestId) {
   const target = { tabId };
   let attached = false;
 
+  addAiDebug('bg', 'Trying debugger input fallback', { requestId, tabId, previousResult });
   const focusResult = await chrome.scripting.executeScript({
     target,
     func: () => {
@@ -292,6 +346,7 @@ async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult) {
   }).catch(error => [{ result: { ok: false, error: error?.message || String(error) } }]);
 
   if (!focusResult?.[0]?.result?.ok) {
+    addAiDebug('bg', 'Debugger focus failed', { requestId, result: focusResult?.[0]?.result });
     return {
       ok: false,
       error: focusResult?.[0]?.result?.error || previousResult?.error || 'Could not focus Google follow-up box'
@@ -299,8 +354,10 @@ async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult) {
   }
 
   try {
+    addAiDebug('bg', 'Attaching Chrome debugger', { requestId, tabId });
     await chrome.debugger.attach(target, '1.3');
     attached = true;
+    addAiDebug('bg', 'Debugger attached; inserting text', { requestId, textLength: query.length });
     await chrome.debugger.sendCommand(target, 'Input.insertText', { text: query });
     await sleep(800);
     await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', {
@@ -319,16 +376,19 @@ async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult) {
     });
     await sleep(700);
   } catch (error) {
+    addAiDebug('bg', 'Debugger input failed', { requestId, error: error?.message || String(error) });
     return {
       ok: false,
       error: `Debugger input failed: ${error?.message || error}`
     };
   } finally {
     if (attached) {
+      addAiDebug('bg', 'Detaching Chrome debugger', { requestId, tabId });
       await chrome.debugger.detach(target).catch(() => {});
     }
   }
 
+  addAiDebug('bg', 'Verifying debugger follow-up submission', { requestId });
   const submittedResult = await chrome.scripting.executeScript({
     target,
     func: async (expectedPrompt) => {
@@ -384,17 +444,19 @@ async function submitGoogleFollowUpWithDebugger(tabId, query, previousResult) {
     args: [query]
   }).catch(error => [{ result: { ok: false, error: error?.message || String(error) } }]);
 
+  addAiDebug('bg', 'Debugger submission verification result', { requestId, result: submittedResult?.[0]?.result });
   return submittedResult?.[0]?.result || {
     ok: false,
     error: previousResult?.error || 'Debugger follow-up failed'
   };
 }
 
-async function handleGoogleAiLang(song, artists) {
+async function handleGoogleAiLang(song, artists, requestId) {
   const cleanQuery = `${song} ${artists}`.trim();
   // Strict prompt so Google SGE/AI answers with a single word or short line
   const followUpQuery = `What language is the song "${cleanQuery}"? Reply with ONLY the language name in a single word. Do not add any other text.`;
   const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(followUpQuery)}&udm=50`;
+  addAiDebug('bg', 'Prepared Google AI query', { requestId, cleanQuery, promptLength: followUpQuery.length });
 
   let usingExistingTab = false;
   let baseTextLength = 0;
@@ -404,6 +466,7 @@ async function handleGoogleAiLang(song, artists) {
     try {
       await chrome.tabs.get(silentTabId); // Throws if tab doesn't exist
       usingExistingTab = true;
+      addAiDebug('bg', 'Using existing Google AI tab', { requestId, silentTabId });
 
       // Get current text length to avoid scanning previous answers
       const snapResults = await chrome.scripting.executeScript({
@@ -411,14 +474,18 @@ async function handleGoogleAiLang(song, artists) {
         func: () => document.body?.innerText?.length || 0
       });
       baseTextLength = snapResults?.[0]?.result || 0;
+      addAiDebug('bg', 'Captured existing tab text length before follow-up', { requestId, baseTextLength });
 
-      const followUpResult = await submitGoogleFollowUp(silentTabId, followUpQuery);
+      const followUpResult = await submitGoogleFollowUp(silentTabId, followUpQuery, requestId);
       if (!followUpResult?.ok) {
-        console.warn('[PlaylistExporter BG] Follow-up submit failed:', followUpResult);
+        addAiDebug('bg', 'Follow-up submit failed; reloading query URL', { requestId, followUpResult });
         await chrome.tabs.update(silentTabId, { url: searchUrl });
         baseTextLength = 0;
+      } else {
+        addAiDebug('bg', 'Follow-up submit confirmed', { requestId, followUpResult });
       }
     } catch (e) {
+      addAiDebug('bg', 'Existing Google tab unavailable', { requestId, error: e?.message || String(e) });
       silentTabId = null;
       usingExistingTab = false;
     }
@@ -426,16 +493,19 @@ async function handleGoogleAiLang(song, artists) {
 
   // 2. Open a new silent tab if none exists
   if (!usingExistingTab) {
+    addAiDebug('bg', 'Opening new minimized Google AI window', { requestId });
     const win = await chrome.windows.create({
       url: searchUrl,
       state: 'minimized',
       focused: false
     });
     silentTabId = win.tabs[0].id;
+    addAiDebug('bg', 'New Google AI tab opened', { requestId, silentTabId, windowId: win.id });
     // Wait for initial load
     await new Promise(r => setTimeout(r, 7000));
   } else {
     // Wait for response to render
+    addAiDebug('bg', 'Waiting for follow-up response render', { requestId });
     await new Promise(r => setTimeout(r, 5000));
   }
 
@@ -581,15 +651,17 @@ async function handleGoogleAiLang(song, artists) {
 
       const res = results?.[0]?.result;
       if (res?.captcha) {
+        addAiDebug('bg', 'CAPTCHA detected while polling', { requestId });
         captcha = true;
         break;
       }
       if (res?.lang) {
         foundLang = res.lang;
+        addAiDebug('bg', 'Language found while polling', { requestId, language: foundLang });
         break;
       }
     } catch (err) {
-      console.warn('[PlaylistExporter BG] Execute script warning:', err);
+      addAiDebug('bg', 'Polling executeScript warning', { requestId, error: err?.message || String(err) });
       break;
     }
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
@@ -607,8 +679,10 @@ async function handleGoogleAiLang(song, artists) {
   }
 
   if (!foundLang) {
+    addAiDebug('bg', 'Timed out waiting for Google AI answer', { requestId });
     throw new Error('Google AI took too long to answer.');
   }
 
+  addAiDebug('bg', 'Returning language result', { requestId, language: foundLang });
   return foundLang;
 }

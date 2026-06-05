@@ -13,17 +13,18 @@ window.addEventListener("message", (event) => {
   }
 
   if (event.data?.type === "FROM_PAGE_ASK_AI_LANG" || event.data?.type === "TO_EXT_AI_LANG_REQUEST") {
-    const { song, artists } = event.data;
+    const { song, artists, requestId } = event.data;
 
     chrome.runtime.sendMessage(
-      { type: "ASK_GOOGLE_AI_LANG", song, artists },
+      { type: "ASK_GOOGLE_AI_LANG", song, artists, requestId },
       (res) => {
         if (chrome.runtime.lastError) {
           window.postMessage({
             type: "FROM_EXT_AI_LANG_RESPONSE",
             ok: false,
             error: chrome.runtime.lastError.message,
-            song
+            song,
+            requestId
           }, "*");
         } else {
           window.postMessage({
@@ -31,11 +32,26 @@ window.addEventListener("message", (event) => {
             ok: res?.ok ?? false,
             language: res?.language,
             error: res?.error,
-            song
+            debug: res?.debug,
+            song,
+            requestId
           }, "*");
         }
       }
     );
+  }
+
+  if (event.data?.type === "FROM_PAGE_GET_AI_DEBUG_LOG") {
+    chrome.runtime.sendMessage({ type: "GET_AI_DEBUG_LOG" }, (res) => {
+      window.postMessage({
+        type: "FROM_EXT_AI_DEBUG_LOG",
+        entries: res?.entries || []
+      }, "*");
+    });
+  }
+
+  if (event.data?.type === "FROM_PAGE_CLEAR_AI_DEBUG_LOG") {
+    chrome.runtime.sendMessage({ type: "CLEAR_AI_DEBUG_LOG" }, () => {});
   }
 });
 

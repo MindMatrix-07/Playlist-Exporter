@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=2.0" />
+  <link rel="stylesheet" href="style.css?v=2.1" />
   <style>
     /* Styling for the segmented control toggle */
     .mode-selector-wrapper {
@@ -173,6 +173,21 @@
         </p>
       </div>
 
+      <div class="ai-debug-panel" id="aiDebugPanel" style="display:none;">
+        <div class="ai-debug-head">
+          <div>
+            <strong>AI Debug Log</strong>
+            <span id="aiDebugSummary">Waiting for language scan activity...</span>
+          </div>
+          <div class="ai-debug-actions">
+            <button type="button" onclick="refreshAiDebugLog()">Refresh</button>
+            <button type="button" onclick="copyAiDebugLog()">Copy</button>
+            <button type="button" onclick="clearAiDebugLog()">Clear</button>
+          </div>
+        </div>
+        <div class="ai-debug-body" id="aiDebugBody"></div>
+      </div>
+
       <button class="btn-fetch" id="fetchBtn" onclick="fetchPlaylist()">
         <span class="btn-text">Fetch Playlist</span>
         <svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -223,6 +238,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=3.0"></script>
+  <script src="app.js?v=3.1"></script>
 </body>
 </html>

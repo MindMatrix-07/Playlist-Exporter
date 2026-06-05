@@ -1291,6 +1291,69 @@ async function exportToPDF() {
 
 let hasExtension = false;
 const pendingRequests = new Map();
+const aiDebugLogs = [];
+let aiDebugCounter = 0;
+
+function addAiDebugLog(scope, message, data = {}) {
+  const entry = {
+    id: ++aiDebugCounter,
+    time: new Date().toLocaleTimeString(),
+    scope,
+    message,
+    data
+  };
+  aiDebugLogs.push(entry);
+  if (aiDebugLogs.length > 160) aiDebugLogs.shift();
+  renderAiDebugLog();
+  return entry;
+}
+
+function formatAiDebugData(data) {
+  const keys = Object.keys(data || {});
+  if (!keys.length) return '';
+  return ' ' + JSON.stringify(data, null, 0);
+}
+
+function renderAiDebugLog() {
+  const panel = document.getElementById('aiDebugPanel');
+  const body = document.getElementById('aiDebugBody');
+  const summary = document.getElementById('aiDebugSummary');
+  if (!panel || !body || !summary) return;
+
+  panel.style.display = 'block';
+  summary.textContent = `${aiDebugLogs.length} log entr${aiDebugLogs.length === 1 ? 'y' : 'ies'}`;
+  body.innerHTML = aiDebugLogs.slice(-90).map(entry => {
+    const line = `[${entry.time}] #${entry.id} ${entry.scope}: ${entry.message}${formatAiDebugData(entry.data)}`;
+    return `<div class="ai-debug-entry">${escHtml(line)}</div>`;
+  }).join('');
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearAiDebugLog() {
+  aiDebugLogs.length = 0;
+  aiDebugCounter = 0;
+  renderAiDebugLog();
+  window.postMessage({ type: "FROM_PAGE_CLEAR_AI_DEBUG_LOG" }, "*");
+  addAiDebugLog('page', 'Debug log cleared');
+}
+
+function copyAiDebugLog() {
+  const text = aiDebugLogs
+    .map(entry => `[${entry.time}] #${entry.id} ${entry.scope}: ${entry.message}${formatAiDebugData(entry.data)}`)
+    .join('\n');
+  navigator.clipboard.writeText(text)
+    .then(() => showToast('AI debug log copied.'))
+    .catch(() => showToast('Could not copy AI debug log.'));
+}
+
+function refreshAiDebugLog() {
+  addAiDebugLog('page', 'Requested extension debug snapshot');
+  window.postMessage({ type: "FROM_PAGE_GET_AI_DEBUG_LOG" }, "*");
+}
+
+function createAiRequestId(index, attempt) {
+  return `ai-${Date.now().toString(36)}-${index + 1}-${attempt}`;
+}
 
 function checkExtensionPresence() {
   const isNativeExt = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
@@ -1313,24 +1376,32 @@ function initAiToggleListener() {
 
   cb.addEventListener('change', () => {
     if (cb.checked && allTracks.length > 0 && !aiDetectionInProgress) {
+      addAiDebugLog('page', 'AI mode enabled by user');
+      refreshAiDebugLog();
       startGoogleAiLanguageDetection();
     } else if (!cb.checked) {
       aiDetectionInProgress = false;
+      addAiDebugLog('page', 'AI mode disabled by user');
     }
   });
 }
 
-function askGoogleAiLang(song, artists) {
+function askGoogleAiLang(song, artists, requestId) {
+  addAiDebugLog('page', 'Sending language request', { requestId, song, artists });
+
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
-        { type: 'ASK_GOOGLE_AI_LANG', song, artists },
+        { type: 'ASK_GOOGLE_AI_LANG', song, artists, requestId },
         (res) => {
           if (chrome.runtime.lastError) {
+            addAiDebugLog('page', 'chrome.runtime.lastError', { requestId, error: chrome.runtime.lastError.message });
             reject(new Error(chrome.runtime.lastError.message));
           } else if (res && res.ok) {
+            addAiDebugLog('page', 'Language response received', { requestId, language: res.language, debug: res.debug });
             resolve(res.language);
           } else {
+            addAiDebugLog('page', 'Language response failed', { requestId, error: res?.error, debug: res?.debug });
             reject(new Error(res?.error || 'AI Mode failed.'));
           }
         }
@@ -1339,21 +1410,23 @@ function askGoogleAiLang(song, artists) {
   }
 
   return new Promise((resolve, reject) => {
-    const key = `${song}||${artists}`;
+    const key = requestId || `${song}||${artists}`;
     const timeout = setTimeout(() => {
       pendingRequests.delete(key);
+      addAiDebugLog('page', 'AI request timed out waiting for extension response', { requestId, song });
       reject(new Error('AI Request timed out.'));
     }, 60000);
 
-    pendingRequests.set(key, { resolve, reject, timeout });
+    pendingRequests.set(key, { resolve, reject, timeout, song, artists, requestId });
 
-    window.postMessage({ type: "FROM_PAGE_ASK_AI_LANG", song, artists }, "*");
+    window.postMessage({ type: "FROM_PAGE_ASK_AI_LANG", song, artists, requestId }, "*");
   });
 }
 
 async function startGoogleAiLanguageDetection() {
   if (aiDetectionInProgress) return;
   aiDetectionInProgress = true;
+  renderAiDebugLog();
 
   const pdfBtn = document.getElementById('pdfBtn');
   const copyBtn = document.getElementById('copyBtn');
@@ -1367,12 +1440,16 @@ async function startGoogleAiLanguageDetection() {
   }
 
   showToast('⚡ Google AI Mode Active: Fetching track languages in background…');
+  addAiDebugLog('page', 'Language scan started', { totalTracks: allTracks.length });
 
   for (let i = 0; i < allTracks.length; i++) {
     if (!aiDetectionInProgress) break;
 
     const track = allTracks[i];
-    if (track.language) continue; // Skip already fetched
+    if (track.language) {
+      addAiDebugLog('page', 'Skipping track with existing language', { row: i + 1, song: track.name, language: track.language });
+      continue;
+    }
 
     const badge = document.getElementById(`lang-badge-${i}`);
     if (badge) {
@@ -1382,12 +1459,16 @@ async function startGoogleAiLanguageDetection() {
 
     let response = '';
     for (let attempt = 1; attempt <= 3 && aiDetectionInProgress; attempt++) {
+      const requestId = createAiRequestId(i, attempt);
       try {
         if (badge) badge.textContent = attempt === 1 ? 'Scanning…' : `Retrying ${attempt}/3…`;
-        response = await askGoogleAiLang(track.name, track.artists);
+        addAiDebugLog('page', 'Track attempt started', { requestId, row: i + 1, attempt, song: track.name });
+        response = await askGoogleAiLang(track.name, track.artists, requestId);
+        addAiDebugLog('page', 'Track attempt succeeded', { requestId, row: i + 1, language: response });
         break;
       } catch (err) {
         console.warn(`[AI Mode] Failed for "${track.name}" attempt ${attempt}:`, err.message);
+        addAiDebugLog('page', 'Track attempt failed', { requestId, row: i + 1, attempt, error: err.message });
 
         if (err.message && err.message.includes('CAPTCHA')) {
           showToast('⚠️ Google CAPTCHA appeared. Please solve it.');
@@ -1416,11 +1497,13 @@ async function startGoogleAiLanguageDetection() {
       badge.classList.remove('scanning-text');
       badge.textContent = 'Skipped';
       showToast(`Skipped language: ${track.name}`);
+      addAiDebugLog('page', 'Track skipped after retries', { row: i + 1, song: track.name });
       await sleep(1500);
     }
   }
 
   aiDetectionInProgress = false;
+  addAiDebugLog('page', 'Language scan finished');
   
   // Re-enable buttons
   const cb = document.getElementById('aiModeCheckbox');
@@ -1440,14 +1523,17 @@ window.addEventListener("message", (event) => {
   if (event.source !== window) return;
 
   if (event.data?.type === "PONG_PLAYLIST_EXPORTER_EXT") {
+    const wasMissing = !hasExtension;
     hasExtension = true;
     checkExtensionPresence();
+    if (wasMissing) addAiDebugLog('extension', 'Extension presence confirmed');
   }
 
   if (event.data?.type === "FROM_EXT_AI_LANG_RESPONSE") {
-    const { ok, language, error, song } = event.data;
+    const { ok, language, error, song, requestId, debug } = event.data;
+    addAiDebugLog('extension', 'Language response message received', { requestId, ok, language, error, debug });
     for (const [key, promise] of pendingRequests.entries()) {
-      if (key.startsWith(song + "||")) {
+      if (key === requestId || key.startsWith(song + "||")) {
         clearTimeout(promise.timeout);
         pendingRequests.delete(key);
         if (ok) {
@@ -1458,6 +1544,14 @@ window.addEventListener("message", (event) => {
         break;
       }
     }
+  }
+
+  if (event.data?.type === "FROM_EXT_AI_DEBUG_LOG") {
+    const entries = event.data.entries || [];
+    addAiDebugLog('extension', 'Received extension debug snapshot', { entries: entries.length });
+    entries.forEach(entry => {
+      addAiDebugLog(`bg:${entry.scope || 'log'}`, entry.message || 'log', entry.data || {});
+    });
   }
 });
 
