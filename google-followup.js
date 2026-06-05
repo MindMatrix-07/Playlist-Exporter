@@ -38,6 +38,7 @@ function playlistExporterFindFollowUpBox() {
 }
 
 function playlistExporterSetBoxText(box, text) {
+  box.click();
   box.focus();
 
   if (box instanceof HTMLTextAreaElement || box instanceof HTMLInputElement) {
@@ -51,7 +52,17 @@ function playlistExporterSetBoxText(box, text) {
       box.value = text;
     }
   } else {
-    box.textContent = text;
+    const selection = window.getSelection();
+    const range = document.createRange();
+    box.textContent = '';
+    range.selectNodeContents(box);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand('insertText', false, text);
+    if (!box.textContent?.includes(text)) {
+      box.textContent = text;
+    }
   }
 
   box.dispatchEvent(new InputEvent('input', {
@@ -67,16 +78,19 @@ function playlistExporterFindSubmitButton(box) {
   const roots = [
     box.closest('form'),
     box.closest('[role="search"]'),
+    box.closest('[data-ved]'),
     box.parentElement,
-    document
+    box.parentElement?.parentElement
   ].filter(Boolean);
 
   const selectors = [
     'button[type="submit"]',
     'button[aria-label*="send" i]',
+    'button[aria-label*="ask" i]',
     'button[aria-label*="submit" i]',
     'button[aria-label*="search" i]',
-    'button'
+    '[role="button"][aria-label*="send" i]',
+    '[role="button"][aria-label*="ask" i]'
   ];
 
   for (const root of roots) {
@@ -91,6 +105,17 @@ function playlistExporterFindSubmitButton(box) {
   return null;
 }
 
+async function playlistExporterWaitForSubmittedPrompt(query) {
+  const needle = query.replace(/\s+/g, ' ').trim();
+  const start = Date.now();
+  while (Date.now() - start < 3500) {
+    const pageText = (document.body?.innerText || '').replace(/\s+/g, ' ');
+    if (pageText.includes(needle)) return true;
+    await playlistExporterSleep(250);
+  }
+  return false;
+}
+
 async function playlistExporterSubmitFollowUp(query) {
   const box = playlistExporterFindFollowUpBox();
   if (!box) {
@@ -99,12 +124,12 @@ async function playlistExporterSubmitFollowUp(query) {
 
   window.__playlistExporterLastPrompt = query;
   playlistExporterSetBoxText(box, query);
-  await playlistExporterSleep(350);
+  await playlistExporterSleep(800);
 
   const button = playlistExporterFindSubmitButton(box);
   if (button) {
     button.click();
-    await playlistExporterSleep(250);
+    await playlistExporterSleep(500);
   }
 
   box.dispatchEvent(new KeyboardEvent('keydown', {
@@ -123,6 +148,17 @@ async function playlistExporterSubmitFollowUp(query) {
     bubbles: true,
     cancelable: true
   }));
+
+  const submitted = await playlistExporterWaitForSubmittedPrompt(query);
+  if (!submitted) {
+    return {
+      ok: false,
+      error: 'Follow-up text was typed but Google did not submit it',
+      clickedButton: Boolean(button),
+      inputTag: box.tagName,
+      placeholder: box.getAttribute('placeholder') || ''
+    };
+  }
 
   return {
     ok: true,

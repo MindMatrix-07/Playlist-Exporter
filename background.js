@@ -32,13 +32,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function submitGoogleFollowUp(tabId, query) {
-  const messageResult = await chrome.tabs.sendMessage(tabId, {
+  let messageResult = await chrome.tabs.sendMessage(tabId, {
     type: 'TYPE_GOOGLE_AI_FOLLOW_UP',
     query
   }).catch(error => ({ ok: false, error: error?.message || String(error) }));
 
   if (messageResult?.ok) {
     return messageResult;
+  }
+
+  if (/receiving end|could not establish connection/i.test(messageResult?.error || '')) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['google-followup.js']
+    }).catch(() => {});
+
+    messageResult = await chrome.tabs.sendMessage(tabId, {
+      type: 'TYPE_GOOGLE_AI_FOLLOW_UP',
+      query
+    }).catch(error => ({ ok: false, error: error?.message || String(error) }));
+
+    if (messageResult?.ok) {
+      return messageResult;
+    }
   }
 
   const injected = await chrome.scripting.executeScript({
@@ -74,6 +90,7 @@ async function submitGoogleFollowUp(tabId, query) {
         return null;
       };
       const setBoxText = (box, text) => {
+        box.click();
         box.focus();
         if (box instanceof HTMLTextAreaElement || box instanceof HTMLInputElement) {
           const proto = box instanceof HTMLTextAreaElement
@@ -86,7 +103,17 @@ async function submitGoogleFollowUp(tabId, query) {
             box.value = text;
           }
         } else {
-          box.textContent = text;
+          const selection = window.getSelection();
+          const range = document.createRange();
+          box.textContent = '';
+          range.selectNodeContents(box);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.execCommand('insertText', false, text);
+          if (!box.textContent?.includes(text)) {
+            box.textContent = text;
+          }
         }
 
         box.dispatchEvent(new InputEvent('input', {
@@ -101,15 +128,18 @@ async function submitGoogleFollowUp(tabId, query) {
         const roots = [
           box.closest('form'),
           box.closest('[role="search"]'),
+          box.closest('[data-ved]'),
           box.parentElement,
-          document
+          box.parentElement?.parentElement
         ].filter(Boolean);
         const selectors = [
           'button[type="submit"]',
           'button[aria-label*="send" i]',
+          'button[aria-label*="ask" i]',
           'button[aria-label*="submit" i]',
           'button[aria-label*="search" i]',
-          'button'
+          '[role="button"][aria-label*="send" i]',
+          '[role="button"][aria-label*="ask" i]'
         ];
 
         for (const root of roots) {
@@ -130,12 +160,12 @@ async function submitGoogleFollowUp(tabId, query) {
 
       window.__playlistExporterLastPrompt = followUpText;
       setBoxText(box, followUpText);
-      await sleep(350);
+      await sleep(800);
 
       const button = findButton(box);
       if (button) {
         button.click();
-        await sleep(250);
+        await sleep(500);
       }
 
       box.dispatchEvent(new KeyboardEvent('keydown', {
@@ -154,6 +184,29 @@ async function submitGoogleFollowUp(tabId, query) {
         bubbles: true,
         cancelable: true
       }));
+
+      const needle = followUpText.replace(/\s+/g, ' ').trim();
+      const start = Date.now();
+      let submitted = false;
+      while (Date.now() - start < 3500) {
+        const pageText = (document.body?.innerText || '').replace(/\s+/g, ' ');
+        if (pageText.includes(needle)) {
+          submitted = true;
+          break;
+        }
+        await sleep(250);
+      }
+
+      if (!submitted) {
+        return {
+          ok: false,
+          error: 'Follow-up text was typed but Google did not submit it',
+          source: 'injected-fallback',
+          clickedButton: Boolean(button),
+          inputTag: box.tagName,
+          placeholder: box.getAttribute('placeholder') || ''
+        };
+      }
 
       return {
         ok: true,
